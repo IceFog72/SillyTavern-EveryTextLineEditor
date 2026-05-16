@@ -1,0 +1,1 @@
+{"version":3,"file":"csv.js","sources":["../../src/grammars/csv.js"],"sourcesContent":["import { Prism, languages } from '../prismCore'\n\n// https://tools.ietf.org/html/rfc4180\n\nlanguages.csv = {\n\t'value': /[^\\r\\n,\"]+|\"(?:[^\"]|\"\")*\"(?!\")/,\n\t'punctuation': /,/\n};\n"],"names":["languages"],"mappings":";AAIAA,EAAU,MAAM;AAAA,EACf,OAAS;AAAA,EACT,aAAe;AAChB;"}

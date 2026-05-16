@@ -13,6 +13,6 @@ npm run build
 
 Useful scripts:
 
-- `npm run build` emits `dist/index.js`, `dist/index.d.ts`, and source maps.
+- `npm run build` emits `dist/index.js`, related module files, source maps, and the local Prism vendor copy under `dist/vendor/prism-code-editor`.
 - `npm run check` runs TypeScript without emitting files.
 - `npm run watch` rebuilds while editing.

@@ -1,0 +1,23 @@
+import { l as a } from "../prismCore-AxbjJFmh.js";
+import "./yaml.js";
+a.tap = {
+  fail: /not ok[^#{\n\r]*/,
+  pass: /ok[^#{\n\r]*/,
+  pragma: /pragma [+-][a-z]+/,
+  bailout: /bail out!.*/i,
+  version: /TAP version \d+/i,
+  plan: /\b\d+\.\.\d+(?: +#.*)?/,
+  subtest: {
+    pattern: /# Subtest(?:: .*)?/,
+    greedy: !0
+  },
+  punctuation: /[{}]/,
+  directive: /#.*/,
+  yamlish: {
+    pattern: /(^[ \t]*)---[\s\S]*?[\r\n][ \t]*\.\.\.$/m,
+    lookbehind: !0,
+    inside: a.yaml,
+    alias: "language-yaml"
+  }
+};
+//# sourceMappingURL=tap.js.map

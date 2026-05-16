@@ -1,9 +1,10 @@
-@import url('./lib/prism-code-editor/layout.css');
-@import url('./lib/prism-code-editor/search.css');
-@import url('./lib/prism-code-editor/themes/vs-code-dark.css');
+@import url('./dist/vendor/prism-code-editor/layout.css');
+@import url('./dist/vendor/prism-code-editor/search.css');
+@import url('./dist/vendor/prism-code-editor/themes/vs-code-dark.css');
 
 #etle--panel {
     --etle-sidebar-width: 320px;
+    --etle-header-height: 3.15rem;
     min-width: min(92vw, 980px);
     width: min(92vw, calc(var(--sheldWidth) + 18vw));
     padding: 0;
@@ -15,15 +16,6 @@
     flex-direction: column;
     height: calc(100dvh - calc(var(--topBarBlockSize) + var(--bottomFormBlockSize)));
     overflow: hidden;
-}
-
-#etle--headerGrip {
-    height: 1.35rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--SmartThemeEmColor);
-    border-bottom: 1px solid var(--SmartThemeBorderColor);
 }
 
 .etle--shell {
@@ -51,8 +43,16 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.75rem;
+    box-sizing: border-box;
+    height: var(--etle-header-height);
+    min-height: var(--etle-header-height);
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.etle--header {
+    gap: 0.75rem;
+    overflow: visible;
 }
 
 .etle--sidebarHead h3,
@@ -143,6 +143,10 @@
     background: color-mix(in srgb, var(--SmartThemeQuoteColor) 25%, transparent);
 }
 
+.etle--sourceList {
+    padding: 0.5rem 0;
+}
+
 .etle--source.etle--readonly,
 .etle--source.etle--placeholder .etle--sourceSelect {
     opacity: 0.72;
@@ -186,22 +190,50 @@
     flex-direction: column;
 }
 
-.etle--header {
-    justify-content: space-between;
-}
-
 .etle--current {
+    flex: 1 1 14rem;
     min-width: 0;
 }
 
-.etle--currentGroup,
-.etle--currentMeta {
-    min-height: 1rem;
+.etle--currentTitleRow {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.etle--currentGroup {
+    display: none;
     color: var(--SmartThemeEmColor);
     font-size: 0.78rem;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    min-height: 1rem;
+    margin-top: 0.15rem;
+}
+
+.etle--editNameBtn {
+    min-width: 2rem;
+    min-height: 2rem;
+    flex: 0 0 auto;
+}
+
+.etle--editNameBtn[hidden] {
+    display: none;
+}
+
+.etle--nameEditInput {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBodyColor);
+    font-size: 1.15rem;
+    font-weight: 600;
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
+    width: 100%;
+    max-width: min(38rem, 100%);
+    outline: none;
 }
 
 .etle--actions {
@@ -209,6 +241,17 @@
     align-items: center;
     gap: 0.4rem;
     flex-shrink: 0;
+}
+
+.etle--actions-left {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+.etle--actions-right {
+    margin-left: auto;
 }
 
 .etle--toggle {
@@ -307,8 +350,13 @@
 
 .etle--oldEditorHost,
 .etle--editorHost {
+    flex: 1;
     min-height: 0;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: #161616; /* Fallback solid dark */
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 85%, black 15%);
 }
 
 .etle--oldEditorHost {
@@ -317,13 +365,13 @@
 }
 
 .etle--showDiff .etle--oldEditorHost {
-    display: block;
+    display: flex;
 }
 
 .etle--oldEditorHost .prism-code-editor,
 .etle--editorHost .prism-code-editor {
     height: 100%;
-    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 75%, black 25%);
+    background: transparent !important;
 }
 
 .etle--showDiff .pce-line.etle--diffRemoved {
@@ -408,4 +456,101 @@
         border-right: 0;
         border-bottom: 1px solid var(--SmartThemeBorderColor);
     }
+}
+
+.etle--showDiff .prism-code-editor::-webkit-scrollbar {
+    width: 0 !important;
+    height: 0 !important;
+    display: none !important;
+}
+
+.etle--showDiff .prism-code-editor {
+    scrollbar-width: none !important; /* Firefox */
+    -ms-overflow-style: none !important; /* IE 10+ */
+}
+
+.etle--workspace {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    background: #161616;
+}
+
+.etle--masterScrollbar {
+    display: none;
+    position: absolute;
+    right: 2px;
+    top: 0;
+    width: 10px;
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    z-index: 100;
+    background: transparent;
+    pointer-events: auto;
+}
+
+.etle--masterScrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.etle--masterScrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.etle--masterScrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+
+.etle--masterScrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.etle--showDiff .etle--masterScrollbar {
+    display: block;
+}
+
+.etle--showDiff.etle--syncOff .etle--masterScrollbar {
+    display: none;
+}
+
+.etle--masterScrollContent {
+    width: 1px;
+}
+
+.pce-line {
+    box-sizing: border-box !important;
+}
+
+.etle--triggerSelectWrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: min(22rem, 100%);
+    max-width: min(26rem, 100%);
+}
+
+.etle--triggerSelectWrap .select2-container {
+    min-width: 14rem;
+    max-width: 22rem;
+}
+
+.etle--triggerSelectWrap .select2-selection--multiple {
+    min-height: 2rem;
+}
+
+.etle--triggerSelectWrap .select2-search__field {
+    min-width: 10rem;
+}
+
+/* Editor Customizations */
+.prism-code-editor .token.tag {
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
 }

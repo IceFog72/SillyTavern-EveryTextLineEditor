@@ -1,0 +1,80 @@
+import { l as e, i as n } from "../prismCore-AxbjJFmh.js";
+import "./clike.js";
+var t = e.kts = e.kt = e.kotlin = e.extend("clike", {
+  keyword: {
+    // The lookbehind prevents wrong highlighting of e.g. kotlin.properties.get
+    pattern: /(^|[^.])\b(?:abstract|actual|annotation|as|break|by|catch|class|companion|const|constructor|continue|crossinline|data|do|dynamic|else|enum|expect|external|final|finally|for|fun|get|if|import|in|infix|init|inline|inner|interface|internal|is|lateinit|noinline|null|object|open|operator|out|override|package|private|protected|public|reified|return|sealed|set|super|suspend|tailrec|this|throw|to|try|typealias|val|var|vararg|when|where|while)\b/,
+    lookbehind: !0
+  },
+  function: [
+    {
+      pattern: /(?:`[^\r\n`]+`|\b\w+)(?=\s*\()/,
+      greedy: !0
+    },
+    {
+      pattern: /(\.)(?:`[^\r\n`]+`|\w+)(?=\s*\{)/,
+      lookbehind: !0,
+      greedy: !0
+    }
+  ],
+  number: /\b(?:0[xX][\da-fA-F]+(?:_[\da-fA-F]+)*|0[bB][01]+(?:_[01]+)*|\d+(?:_\d+)*(?:\.\d+(?:_\d+)*)?(?:[eE][+-]?\d+(?:_\d+)*)?[fFL]?)\b/,
+  operator: /\+[+=]?|-[-=>]?|==?=?|!(?:!|==?)?|[\/*%<>]=?|[?:]:?|\.\.|&&|\|\||\b(?:and|inv|or|shl|shr|ushr|xor)\b/
+});
+delete t["class-name"];
+var i = {
+  "interpolation-punctuation": {
+    pattern: /^\$\{?|\}$/,
+    alias: "punctuation"
+  },
+  expression: {
+    pattern: /[\s\S]+/,
+    inside: t
+  }
+};
+n("kotlin", "comment", {
+  // https://kotlinlang.org/spec/expressions.html#string-interpolation-expressions
+  "string-literal": [
+    {
+      pattern: /"""(?:[^$]|\$(?:(?!\{)|\{[^{}]*\}))*?"""/,
+      alias: "multiline",
+      inside: {
+        interpolation: {
+          pattern: /\$(?:[a-z_]\w*|\{[^{}]*\})/i,
+          inside: i
+        },
+        string: /[\s\S]+/
+      }
+    },
+    {
+      pattern: /"(?:[^"\\\r\n$]|\\.|\$(?:(?!\{)|\{[^{}]*\}))*"/,
+      alias: "singleline",
+      inside: {
+        interpolation: {
+          pattern: /((?:^|[^\\])(?:\\{2})*)\$(?:[a-z_]\w*|\{[^{}]*\})/i,
+          lookbehind: !0,
+          inside: i
+        },
+        string: /[\s\S]+/
+      }
+    }
+  ],
+  char: {
+    // https://kotlinlang.org/spec/expressions.html#character-literals
+    pattern: /'(?:[^'\\\r\n]|\\(?:.|u[a-fA-F0-9]{0,4}))'/,
+    greedy: !0
+  }
+});
+delete t.string;
+n("kotlin", "keyword", {
+  annotation: {
+    pattern: /\B@(?:\w+:)?(?:[A-Z]\w*|\[[^\]]+\])/,
+    alias: "builtin"
+  }
+});
+n("kotlin", "function", {
+  label: {
+    pattern: /\b\w+@|@\w+\b/,
+    alias: "symbol"
+  }
+});
+//# sourceMappingURL=kotlin.js.map

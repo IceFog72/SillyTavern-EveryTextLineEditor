@@ -1,1 +1,0 @@
-{"version":3,"file":"stan.js","sources":["../../src/languages/stan.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.stan = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB;"}

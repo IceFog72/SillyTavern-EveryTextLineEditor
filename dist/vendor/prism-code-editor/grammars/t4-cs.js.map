@@ -1,0 +1,1 @@
+{"version":3,"file":"t4-cs.js","sources":["../../src/grammars/t4-cs.js"],"sourcesContent":["import { Prism, languages } from '../prismCore'\nimport './t4-templating'\nimport './csharp'\n\nlanguages.t4 = languages['t4-cs'] = languages['t4-templating'].createT4('csharp');\n"],"names":["languages"],"mappings":";;;;AAIAA,EAAU,KAAKA,EAAU,OAAO,IAAIA,EAAU,eAAe,EAAE,SAAS,QAAQ;"}

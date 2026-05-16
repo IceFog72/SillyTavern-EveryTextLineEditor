@@ -1,0 +1,1 @@
+{"version":3,"file":"t4-vb.js","sources":["../../src/grammars/t4-vb.js"],"sourcesContent":["import { Prism, languages } from '../prismCore'\nimport './t4-templating'\nimport './vbnet'\n\nlanguages['t4-vb'] = languages['t4-templating'].createT4('vbnet');\n"],"names":["languages"],"mappings":";;;;AAIAA,EAAU,OAAO,IAAIA,EAAU,eAAe,EAAE,SAAS,OAAO;"}

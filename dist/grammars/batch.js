@@ -1,0 +1,95 @@
+import { l as n } from "../prismCore-AxbjJFmh.js";
+var e = /%%?[~:\w]+%?|!\S+!/, r = {
+  pattern: /\/[a-z?]+(?=[ :]|$):?|-[a-z]\b|--[a-z-]+\b/im,
+  alias: "attr-name",
+  inside: {
+    punctuation: /:/
+  }
+}, t = /"(?:[\\"]"|[^"])*"(?!")/, a = /(?:\b|-)\d+\b/;
+n.batch = {
+  comment: [
+    /^::.*/m,
+    {
+      pattern: /((?:^|[&(])[ \t]*)rem\b(?:[^^&)\r\n]|\^(?:\r\n|[\s\S]))*/im,
+      lookbehind: !0
+    }
+  ],
+  label: {
+    pattern: /^:.*/m,
+    alias: "property"
+  },
+  command: [
+    {
+      // FOR command
+      pattern: /((?:^|[&(])[ \t]*)for(?: \/[a-z?](?:[ :](?:"[^"]*"|[^\s"/]\S*))?)* \S+ in \([^)]+\) do/im,
+      lookbehind: !0,
+      inside: {
+        keyword: /\b(?:do|in)\b|^for\b/i,
+        string: t,
+        parameter: r,
+        variable: e,
+        number: a,
+        punctuation: /[()',]/
+      }
+    },
+    {
+      // IF command
+      pattern: /((?:^|[&(])[ \t]*)if(?: \/[a-z?](?:[ :](?:"[^"]*"|[^\s"/]\S*))?)* (?:not )?(?:cmdextversion \d+|defined \w+|errorlevel \d+|exist \S+|(?:"[^"]*"|(?!")(?:(?!==)\S)+)?(?:==| (?:equ|geq|gtr|leq|lss|neq) )(?:"[^"]*"|[^\s"]\S*))/im,
+      lookbehind: !0,
+      inside: {
+        keyword: /\b(?:cmdextversion|defined|errorlevel|exist|not)\b|^if\b/i,
+        string: t,
+        parameter: r,
+        variable: e,
+        number: a,
+        operator: /\^|==|\b(?:equ|geq|gtr|leq|lss|neq)\b/i
+      }
+    },
+    {
+      // ELSE command
+      pattern: /((?:^|[&()])[ \t]*)else\b/im,
+      lookbehind: !0,
+      inside: {
+        keyword: /^else\b/i
+      }
+    },
+    {
+      // SET command
+      pattern: /((?:^|[&(])[ \t]*)set(?: \/[a-z](?:[ :](?:"[^"]*"|[^\s"/]\S*))?)* (?:[^^&)\r\n]|\^(?:\r\n|[\s\S]))*/im,
+      lookbehind: !0,
+      inside: {
+        keyword: /^set\b/i,
+        string: t,
+        parameter: r,
+        variable: [
+          e,
+          /\w+(?=(?:[*\/%+\-&^|]|<<|>>)?=)/
+        ],
+        number: a,
+        operator: /[*\/%+\-&^|]=?|<<=?|>>=?|[!~_=]/,
+        punctuation: /[()',]/
+      }
+    },
+    {
+      // Other commands
+      pattern: /((?:^|[&(])[ \t]*@?)\w+\b(?:"(?:[\\"]"|[^"])*"(?!")|[^"^&)\r\n]|\^(?:\r\n|[\s\S]))*/m,
+      lookbehind: !0,
+      inside: {
+        keyword: /^\w+\b/,
+        string: t,
+        parameter: r,
+        label: {
+          pattern: /(^\s*):\S+/m,
+          lookbehind: !0,
+          alias: "property"
+        },
+        variable: e,
+        number: a,
+        operator: /\^/
+      }
+    }
+  ],
+  operator: /[&@]/,
+  punctuation: /[()']/
+};
+//# sourceMappingURL=batch.js.map
