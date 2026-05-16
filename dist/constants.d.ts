@@ -3,9 +3,14 @@ export declare const STORAGE: {
     selectedSource: string;
     wordWrap: string;
     panelWidth: string;
+    sidebarCollapsed: string;
     collapsedGroups: string;
     indentMode: string;
     scrollSync: string;
+};
+export declare const DB: {
+    readonly NAME: `${string}:history`;
+    readonly VERSION: 1;
 };
 export declare const INDENT_MODES: readonly [{
     readonly id: "tabs";

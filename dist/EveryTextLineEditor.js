@@ -12,6 +12,8 @@ import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
 import { NAME, STORAGE, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 import { getCollapsedGroups, getLineDiff, getSources, setCollapsedGroups } from './SourceManager.js';
+import { HistoryStore } from './HistoryStore.js';
+import { HistoryPanel } from './HistoryPanel.js';
 // Disable tag highlighting to prevent misalignment issues
 if (Prism.languages.markdown) {
     delete Prism.languages.markdown.tag;
@@ -34,8 +36,13 @@ export class EveryTextLineEditor {
     isSyncingScroll;
     scrollSyncFrame;
     pendingScrollSync;
+    pendingDiffScrollSync;
     indentMode;
     selectedSidebarTab;
+    selectedHistoryGroup;
+    historyStore;
+    historyPanel;
+    historyCommit;
     constructor() {
         this.sources = [];
         this.selectedSource = null;
@@ -48,8 +55,11 @@ export class EveryTextLineEditor {
         this.isSyncingScroll = false;
         this.scrollSyncFrame = 0;
         this.pendingScrollSync = null;
+        this.pendingDiffScrollSync = null;
         this.indentMode = getIndentMode();
         this.selectedSidebarTab = 'sources';
+        this.selectedHistoryGroup = '';
+        this.historyStore = new HistoryStore();
         const storedSync = localStorage.getItem(STORAGE.scrollSync);
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
@@ -121,6 +131,7 @@ export class EveryTextLineEditor {
         root.id = 'etle--panel';
         root.classList.add('drawer-content', 'closedDrawer');
         root.style.setProperty('--etle-sidebar-width', localStorage.getItem(STORAGE.panelWidth) || '320px');
+        root.classList.toggle('etle--sidebarCollapsed', localStorage.getItem(STORAGE.sidebarCollapsed) === 'true');
         const shell = document.createElement('div');
         shell.classList.add('etle--shell');
         root.append(shell);
@@ -136,6 +147,9 @@ export class EveryTextLineEditor {
         sidebarHead.append(sidebarTitle);
         const refresh = this.makeIconButton('fa-rotate', 'Refresh sources', () => this.refreshSources(true));
         sidebarHead.append(refresh);
+        const collapseSidebar = this.makeIconButton('fa-angles-left', 'Collapse sidebar', () => this.setSidebarCollapsed(true));
+        this.dom.sidebarCollapse = collapseSidebar;
+        sidebarHead.append(collapseSidebar);
         const tabs = document.createElement('div');
         this.dom.sidebarTabs = tabs;
         tabs.classList.add('etle--sidebarTabs');
@@ -172,12 +186,38 @@ export class EveryTextLineEditor {
         this.dom.historyPanel = historyPanel;
         historyPanel.classList.add('etle--tabPanel', 'etle--historyPanel');
         historyPanel.dataset.tab = 'history';
-        historyPanel.append(this.renderHistoryShell());
         sidebarBody.append(historyPanel);
         const settingsPanel = document.createElement('section');
         this.dom.settingsPanel = settingsPanel;
         settingsPanel.classList.add('etle--tabPanel', 'etle--settingsPanel');
         settingsPanel.dataset.tab = 'settings';
+        // Add placeholders for History Management
+        const settingsHead = document.createElement('div');
+        settingsHead.classList.add('etle--settingsHead');
+        settingsHead.innerHTML = '<h4>History Management</h4><p>These features are planned but not yet implemented.</p>';
+        settingsPanel.append(settingsHead);
+        const settingsBody = document.createElement('div');
+        settingsBody.classList.add('etle--settingsBody');
+        const limitGroup = this.createPropGroup('Limit Commits per Source');
+        const limitInput = document.createElement('input');
+        limitInput.type = 'number';
+        limitInput.value = '100';
+        limitInput.disabled = true;
+        limitInput.classList.add('text_pole');
+        limitGroup.append(limitInput);
+        settingsBody.append(limitGroup);
+        const exportGroup = this.createPropGroup('Export History');
+        const exportBtn = this.makeTextButton('Save all as zip', 'fa-file-zipper', () => alert('Not implemented yet'));
+        exportBtn.disabled = true;
+        exportGroup.append(exportBtn);
+        settingsBody.append(exportGroup);
+        const clearGroup = this.createPropGroup('Clear History');
+        const clearBtn = this.makeTextButton('Clear All History', 'fa-trash', () => alert('Not implemented yet'));
+        clearBtn.classList.add('redUI');
+        clearBtn.disabled = true;
+        clearGroup.append(clearBtn);
+        settingsBody.append(clearGroup);
+        settingsPanel.append(settingsBody);
         sidebarBody.append(settingsPanel);
         this.setSidebarTab(this.selectedSidebarTab);
         const resize = document.createElement('div');
@@ -190,6 +230,10 @@ export class EveryTextLineEditor {
         const header = document.createElement('header');
         header.classList.add('etle--header');
         main.append(header);
+        const restoreSidebar = this.makeIconButton('fa-angles-right', 'Show sidebar', () => this.setSidebarCollapsed(false));
+        this.dom.sidebarRestore = restoreSidebar;
+        restoreSidebar.classList.add('etle--sidebarRestore');
+        header.append(restoreSidebar);
         const current = document.createElement('div');
         this.dom.current = current;
         current.classList.add('etle--current');
@@ -248,133 +292,62 @@ export class EveryTextLineEditor {
         this.createCodeEditor(editorHost);
         this.createReadonlyEditor(oldEditorHost);
         root.append(this.renderStatusBar());
+        if (this.dom.historyPanel) {
+            this.historyPanel = new HistoryPanel(this.dom.historyPanel, {
+                onDiffCommit: (commit) => this.diffHistoryCommit(commit),
+                onLoadCommit: (commit) => this.loadHistoryCommit(commit),
+                onInitialCommit: async () => {
+                    const groupToCommit = this.selectedHistoryGroup || this.selectedSource?.group;
+                    if (!groupToCommit)
+                        return;
+                    const sourcesInGroup = this.sources.filter(s => s.group === groupToCommit && !s.readonly && !s.placeholder);
+                    const batchId = this.createHistoryBatchId();
+                    await Promise.all(sourcesInGroup.map(async (source) => {
+                        try {
+                            const value = source.read();
+                            await this.historyStore.commit(source, value, 'manual', 'Initial Commit', batchId);
+                        }
+                        catch (err) {
+                            console.warn(`[ETLE] Failed to commit initial state for ${source.id}`, err);
+                        }
+                    }));
+                    await this.refreshHistory();
+                },
+                onManualCommit: async (message, changedSources) => {
+                    const batchId = this.createHistoryBatchId();
+                    await Promise.all(changedSources.map(async ({ source }) => {
+                        try {
+                            const value = source.read();
+                            await this.historyStore.commit(source, value, 'manual', message || undefined, batchId);
+                        }
+                        catch (err) {
+                            console.warn(`[ETLE] Failed to commit ${source.id}`, err);
+                        }
+                    }));
+                    await this.refreshHistory();
+                },
+                onSelectCategory: async (groupName) => {
+                    this.selectedHistoryGroup = groupName;
+                    const firstSource = this.sources.find(s => s.group === groupName && !s.placeholder);
+                    if (firstSource && (!this.selectedSource || this.selectedSource.group !== groupName)) {
+                        await this.selectSource(firstSource.id, { force: true });
+                    }
+                    else {
+                        await this.refreshHistory();
+                    }
+                },
+                onSelectSource: async (sourceId) => {
+                    await this.selectSource(sourceId, { force: true });
+                }
+            });
+        }
+        this.historyStore.open().catch(err => console.error('[ETLE] History failed to open', err));
         this.updateDirty(false);
         this.updateStatusBar();
         return root;
     }
-    renderHistoryShell() {
-        const root = document.createElement('div');
-        root.classList.add('etle--historyShell');
-        const changes = document.createElement('section');
-        changes.classList.add('etle--historySection');
-        changes.innerHTML = `
-            <button type="button" class="etle--historySectionHeader">
-                <span class="fa-solid fa-fw fa-chevron-down"></span>
-                <span>Changes</span>
-                <small>8</small>
-            </button>
-            <textarea class="text_pole etle--commitMessage" placeholder="Message (Ctrl+Enter to commit on...)"></textarea>
-            <button type="button" class="menu_button etle--commitButton">
-                <span class="fa-solid fa-fw fa-check"></span>
-                <span>Commit</span>
-                <span class="fa-solid fa-fw fa-chevron-down"></span>
-            </button>
-            <div class="etle--changeList" aria-label="Pending changes"></div>
-        `;
-        root.append(changes);
-        const changeList = changes.querySelector('.etle--changeList');
-        const dummyChanges = [
-            ['#', 'style.css', '', 'M'],
-            ['TS', 'EveryTextLineEditor.d.ts', 'dist', 'M'],
-            ['JS', 'EveryTextLineEditor.js', 'dist', 'M'],
-            ['JS', 'EveryTextLineEditor.js.map', 'dist', 'M'],
-            ['TS', 'types.d.ts', 'dist', 'M'],
-            ['MD', 'Browser-History-Plan.md', 'docs', 'U'],
-            ['TS', 'EveryTextLineEditor.ts', 'src', 'M'],
-            ['TS', 'types.ts', 'src', 'M'],
-        ];
-        for (const [kind, name, folder, status] of dummyChanges) {
-            const row = document.createElement('div');
-            row.classList.add('etle--historyRow');
-            row.innerHTML = `
-                <span class="etle--fileKind">${kind}</span>
-                <span class="etle--fileName"></span>
-                <small></small>
-                <span class="etle--historyActions">
-                    <span class="fa-solid fa-fw fa-file-arrow-up"></span>
-                    <span class="fa-solid fa-fw fa-rotate-left"></span>
-                    <span class="fa-solid fa-fw fa-plus"></span>
-                </span>
-                <span class="etle--fileStatus"></span>
-            `;
-            row.querySelector('.etle--fileName').textContent = name;
-            row.querySelector('small').textContent = folder;
-            row.querySelector('.etle--fileStatus').textContent = status;
-            changeList.append(row);
-        }
-        const graph = document.createElement('section');
-        graph.classList.add('etle--historySection', 'etle--graphSection');
-        graph.innerHTML = `
-            <button type="button" class="etle--historySectionHeader">
-                <span class="fa-solid fa-fw fa-chevron-down"></span>
-                <span>History</span>
-                <small>3</small>
-            </button>
-            <div class="etle--commitTree" aria-label="History tree"></div>
-        `;
-        root.append(graph);
-        const graphList = graph.querySelector('.etle--commitTree');
-        const dummyCommits = [
-            {
-                title: 'Refactor code structure for implementation',
-                time: '2 min ago',
-                files: [
-                    ['TS', 'EveryTextLineEditor.ts', 'src', 'M'],
-                    ['TS', 'types.ts', 'src', 'M'],
-                    ['#', 'style.css', '', 'M'],
-                ],
-            },
-            {
-                title: 'Add initial TypeScript configuration',
-                time: '18 min ago',
-                files: [
-                    ['TS', 'index.ts', 'src', 'A'],
-                    ['{}', 'tsconfig.json', '', 'A'],
-                    ['{}', 'package.json', '', 'M'],
-                ],
-            },
-            {
-                title: 'Update manifest for editor entrypoint',
-                time: '34 min ago',
-                files: [
-                    ['{}', 'manifest.json', '', 'M'],
-                    ['JS', 'index.js', '', 'A'],
-                ],
-            },
-        ];
-        for (const commit of dummyCommits) {
-            const item = document.createElement('details');
-            item.classList.add('etle--commitItem');
-            item.open = true;
-            item.innerHTML = `
-                <summary class="etle--commitRow">
-                    <span class="fa-solid fa-fw fa-chevron-right etle--commitChevron"></span>
-                    <span class="etle--commitTitle"></span>
-                    <small></small>
-                </summary>
-                <div class="etle--commitFiles"></div>
-            `;
-            item.querySelector('.etle--commitTitle').textContent = commit.title;
-            item.querySelector('small').textContent = commit.time;
-            const files = item.querySelector('.etle--commitFiles');
-            for (const [kind, name, folder, status] of commit.files) {
-                const file = document.createElement('div');
-                file.classList.add('etle--commitFile');
-                file.innerHTML = `
-                    <span class="etle--fileKind"></span>
-                    <span class="etle--fileName"></span>
-                    <small></small>
-                    <span class="etle--fileStatus"></span>
-                `;
-                file.querySelector('.etle--fileKind').textContent = kind;
-                file.querySelector('.etle--fileName').textContent = name;
-                file.querySelector('small').textContent = folder;
-                file.querySelector('.etle--fileStatus').textContent = status;
-                files.append(file);
-            }
-            graphList.append(item);
-        }
-        return root;
+    createHistoryBatchId() {
+        return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     }
     setSidebarTab(tab) {
         this.selectedSidebarTab = tab;
@@ -383,6 +356,17 @@ export class EveryTextLineEditor {
         });
         this.dom.sidebarBody?.querySelectorAll('.etle--tabPanel').forEach(panel => {
             panel.hidden = panel.dataset.tab !== tab;
+        });
+        if (tab === 'history')
+            this.refreshHistory();
+    }
+    setSidebarCollapsed(collapsed) {
+        this.dom.root?.classList.toggle('etle--sidebarCollapsed', collapsed);
+        localStorage.setItem(STORAGE.sidebarCollapsed, JSON.stringify(collapsed));
+        requestAnimationFrame(() => {
+            this.editor?.update?.();
+            this.oldEditor?.update?.();
+            this.updateMasterScrollbarHeight();
         });
     }
     toggleDrawerClasses() {
@@ -421,6 +405,43 @@ export class EveryTextLineEditor {
         const left = document.createElement('div');
         left.classList.add('etle--statusLeft');
         status.append(left);
+        const branch = document.createElement('select');
+        this.dom.statusBranch = branch;
+        branch.classList.add('etle--statusBranch', 'etle--statusItem', 'menu_button');
+        branch.hidden = true;
+        branch.addEventListener('change', async () => {
+            const selectedBranch = branch.value;
+            const branchManager = this.selectedSource?.branchManager;
+            if (!branchManager || branchManager.getCurrentBranch() === selectedBranch)
+                return;
+            if (this.dirty) {
+                const choice = await this.confirmUnsavedSourceChange('switch branch');
+                if (choice === 'cancel') {
+                    branch.value = branchManager.getCurrentBranch(); // Revert selection
+                    return;
+                }
+                if (choice === 'save') {
+                    const saved = await this.saveCurrentSource({ refresh: false, toast: true });
+                    if (!saved) {
+                        branch.value = branchManager.getCurrentBranch(); // Revert selection
+                        return;
+                    }
+                }
+                if (choice === 'discard') {
+                    this.updateDirty(false);
+                }
+            }
+            await branchManager.switchBranch(selectedBranch);
+            // Give ST a moment to update globals before refreshing
+            setTimeout(async () => {
+                await this.refreshSources(true);
+            }, 100);
+        });
+        const branchWrapper = document.createElement('div');
+        branchWrapper.classList.add('etle--statusBranchWrapper');
+        branchWrapper.innerHTML = '<span class="fa-solid fa-code-branch etle--statusBranchIcon"></span>';
+        branchWrapper.append(branch);
+        left.append(branchWrapper);
         const dirty = document.createElement('span');
         this.dom.statusDirty = dirty;
         dirty.classList.add('etle--statusItem', 'etle--dirtyStatus');
@@ -500,10 +521,23 @@ export class EveryTextLineEditor {
         setSlashCommandAutoComplete(this.editor.textarea, true).then((autocomplete) => {
             this.editor.textarea.addEventListener('keydown', (event) => autocomplete.handleKeyDown(event), { capture: true });
         }).catch(() => { });
-        this.editor.textarea.addEventListener('keyup', () => this.updateStatusBar());
-        this.editor.textarea.addEventListener('click', () => this.updateStatusBar());
-        this.editor.textarea.addEventListener('select', () => this.updateStatusBar());
-        this.editor.textarea.addEventListener('input', () => this.updateStatusBar());
+        const syncCaret = () => {
+            this.updateStatusBar();
+            this.scheduleDiffScrollSync();
+        };
+        this.editor.textarea.addEventListener('keydown', (event) => {
+            if (this.isCaretNavigationKey(event))
+                this.scheduleDiffScrollSync();
+        });
+        this.editor.textarea.addEventListener('keyup', syncCaret);
+        this.editor.textarea.addEventListener('pointerup', syncCaret);
+        this.editor.textarea.addEventListener('click', syncCaret);
+        this.editor.textarea.addEventListener('select', syncCaret);
+        this.editor.textarea.addEventListener('input', syncCaret);
+        document.addEventListener('selectionchange', () => {
+            if (document.activeElement === this.editor?.textarea)
+                syncCaret();
+        });
     }
     handleEditorKeyDown(event) {
         const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
@@ -512,6 +546,18 @@ export class EveryTextLineEditor {
         event.preventDefault();
         event.stopImmediatePropagation();
         this.apply().catch((error) => console.error(`[${NAME}] Failed to save from keyboard shortcut`, error));
+    }
+    isCaretNavigationKey(event) {
+        return [
+            'ArrowUp',
+            'ArrowDown',
+            'ArrowLeft',
+            'ArrowRight',
+            'PageUp',
+            'PageDown',
+            'Home',
+            'End',
+        ].includes(event.key);
     }
     createReadonlyEditor(host) {
         this.oldEditor = createEditor(host, {
@@ -546,16 +592,14 @@ export class EveryTextLineEditor {
         this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true });
         this.editor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
         this.oldEditor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
-        // Sync horizontal scroll as before
-        const syncHorizontal = (from, to) => {
+        const syncFromEditor = (from, to) => {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off' || this.isSyncingScroll)
                 return;
-            this.isSyncingScroll = true;
-            to.scrollLeft = from.scrollLeft;
-            setTimeout(() => this.isSyncingScroll = false, 0);
+            this.applyScrollSync(from, to);
+            this.dom.masterScrollbar.scrollTop = from.scrollTop;
         };
-        this.editor.scrollContainer.addEventListener('scroll', () => syncHorizontal(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true });
-        this.oldEditor.scrollContainer.addEventListener('scroll', () => syncHorizontal(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true });
+        this.editor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true });
+        this.oldEditor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true });
     }
     applyScrollSync(from, to) {
         this.isSyncingScroll = true;
@@ -589,6 +633,19 @@ export class EveryTextLineEditor {
         if (!this.editor || !this.oldEditor || !this.diffOpen)
             return;
         this.applyScrollSync(this.editor.scrollContainer, this.oldEditor.scrollContainer);
+        if (this.dom.masterScrollbar) {
+            this.dom.masterScrollbar.scrollTop = this.editor.scrollContainer.scrollTop;
+        }
+    }
+    scheduleDiffScrollSync() {
+        if (!this.diffOpen || this.scrollSyncMode.id === 'off')
+            return;
+        if (this.pendingDiffScrollSync !== null)
+            return;
+        this.pendingDiffScrollSync = requestAnimationFrame(() => {
+            this.pendingDiffScrollSync = null;
+            this.syncDiffScroll();
+        });
     }
     async refreshSources(keepSelection = false) {
         const previousId = keepSelection ? this.selectedSource?.id : localStorage.getItem(STORAGE.selectedSource);
@@ -737,6 +794,8 @@ export class EveryTextLineEditor {
         this.renderDiff();
         this.updateStatusBar();
         this.renderTree();
+        if (this.selectedSidebarTab === 'history')
+            this.refreshHistory();
     }
     async confirmUnsavedSourceChange(action = 'switch') {
         const actionText = action === 'close' ? 'closing the editor' : 'switching sources';
@@ -981,6 +1040,33 @@ export class EveryTextLineEditor {
     updateStatusBar() {
         const wrapEnabled = JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true');
         const stats = this.getEditorStats();
+        if (this.dom.statusBranch) {
+            const branchManager = this.selectedSource?.branchManager;
+            if (branchManager) {
+                const branches = branchManager.getBranches();
+                const current = branchManager.getCurrentBranch();
+                // Only reconstruct options if they changed to prevent losing focus
+                const currentOptions = Array.from(this.dom.statusBranch.options).map(o => o.value);
+                if (currentOptions.join(',') !== branches.join(',')) {
+                    this.dom.statusBranch.innerHTML = '';
+                    for (const b of branches) {
+                        const option = document.createElement('option');
+                        option.value = b;
+                        option.textContent = b;
+                        this.dom.statusBranch.append(option);
+                    }
+                }
+                this.dom.statusBranch.value = current;
+                this.dom.statusBranch.hidden = false;
+                this.dom.statusBranch.parentElement.hidden = false;
+            }
+            else {
+                this.dom.statusBranch.hidden = true;
+                if (this.dom.statusBranch.parentElement?.classList.contains('etle--statusBranchWrapper')) {
+                    this.dom.statusBranch.parentElement.hidden = true;
+                }
+            }
+        }
         if (this.dom.statusDirty) {
             this.dom.statusDirty.textContent = this.dirty ? 'Unsaved changes' : 'All changes saved';
             this.dom.statusDirty.classList.toggle('etle--statusDirty', this.dirty);
@@ -1026,6 +1112,7 @@ export class EveryTextLineEditor {
         try {
             this.selectedSource.write(value);
             await this.selectedSource.save?.();
+            this.historyCommit = undefined;
             this.updateDirty(false);
             if (refresh)
                 await this.refreshSources(true);
@@ -1071,31 +1158,28 @@ export class EveryTextLineEditor {
             return;
         const saved = this.selectedSource ? this.selectedSource.read() : '';
         const unsaved = this.editor?.value ?? '';
-        this.oldEditor.setOptions({ value: saved || '' });
-        requestAnimationFrame(() => this.highlightDiff(saved, unsaved));
-    }
-    highlightDiff(saved, unsaved) {
         const diff = getLineDiff(saved, unsaved);
-        this.applyDiffMarks(this.oldEditor, diff.oldMarks, 'removed', diff.oldSpacers);
-        this.applyDiffMarks(this.editor, diff.newMarks, 'added', diff.newSpacers);
+        this.oldEditor.setOptions({ value: diff.oldDisplayText });
+        requestAnimationFrame(() => this.highlightDiff(diff));
+    }
+    highlightDiff(diff) {
+        this.applyDiffMarks(this.oldEditor, diff.oldMarks, 'removed');
+        this.applyDiffMarks(this.editor, diff.newMarks, 'added');
         this.updateMasterScrollbarHeight();
     }
-    applyDiffMarks(editor, marks, activeMark, spacers) {
+    applyDiffMarks(editor, marks, activeMark) {
         if (!editor)
             return;
         const lines = [...editor.wrapper.querySelectorAll('.pce-line')];
         lines.forEach((line, index) => {
-            line.classList.remove('etle--diffAdded', 'etle--diffRemoved');
-            line.style.marginTop = '';
+            line.classList.remove('etle--diffAdded', 'etle--diffRemoved', 'etle--diffPlaceholder');
             if (!this.diffOpen)
                 return;
-            const spacerCount = spacers[index] || 0;
-            if (spacerCount > 0) {
-                const height = line.offsetHeight || 20; // Default to 20 if not rendered
-                line.style.marginTop = `${spacerCount * height}px`;
-            }
             if (marks[index] === activeMark) {
                 line.classList.add(activeMark === 'added' ? 'etle--diffAdded' : 'etle--diffRemoved');
+            }
+            if (activeMark === 'removed' && marks[index] === 'added') {
+                line.classList.add('etle--diffPlaceholder');
             }
         });
     }
@@ -1110,6 +1194,8 @@ export class EveryTextLineEditor {
         if (this.dom.revert)
             this.dom.revert.disabled = !this.dirty;
         this.updateStatusBar();
+        if (this.selectedSidebarTab === 'history')
+            this.refreshHistory();
     }
     async open() {
         await this.refreshSources(true);
@@ -1152,6 +1238,54 @@ export class EveryTextLineEditor {
         };
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+    }
+    async refreshHistory() {
+        if (!this.historyPanel)
+            return;
+        const activeGroup = this.selectedHistoryGroup || this.selectedSource?.group;
+        if (!activeGroup) {
+            this.historyPanel.render('', [], [], [], []);
+            return;
+        }
+        const allGroups = Array.from(new Set(this.sources.map(s => s.group))).sort();
+        const groupSources = this.sources.filter(s => s.group === activeGroup);
+        // 1. Detect Changes
+        const changedSources = [];
+        await Promise.all(groupSources.map(async (source) => {
+            if (source.readonly || source.placeholder)
+                return;
+            const latest = await this.historyStore.getLatestSource(source.id);
+            const currentValue = source.read();
+            const hash = await this.historyStore.hashContent(currentValue);
+            if (!latest) {
+                // If no history exists, it's technically "Added" in terms of version control
+                changedSources.push({ source, status: 'A' });
+            }
+            else if (latest.latestHash !== hash) {
+                changedSources.push({ source, status: 'M' });
+            }
+        }));
+        // 2. Fetch Commits for all sources in group
+        const commitPromises = groupSources.map(s => this.historyStore.listCommits(s.id, 50));
+        const allCommitsArrays = await Promise.all(commitPromises);
+        const flattenedCommits = allCommitsArrays.flat().sort((a, b) => b.createdAt - a.createdAt);
+        // Take latest 100 group-wide commits
+        const finalCommits = flattenedCommits.slice(0, 100);
+        this.historyPanel.render(activeGroup, allGroups, this.sources, finalCommits, changedSources);
+    }
+    async diffHistoryCommit(commit) {
+        this.historyCommit = commit;
+        this.oldEditor.value = commit.content;
+        if (!this.diffOpen)
+            this.toggleDiff();
+        this.renderDiff();
+    }
+    async loadHistoryCommit(commit) {
+        if (this.dirty && !confirm('You have unsaved changes. Discard them and load this version?'))
+            return;
+        this.editor.value = commit.content;
+        this.historyCommit = commit;
+        this.updateDirty(true);
     }
 }
 //# sourceMappingURL=EveryTextLineEditor.js.map

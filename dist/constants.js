@@ -5,9 +5,14 @@ export const STORAGE = {
     selectedSource: `${NAME}:selectedSource`,
     wordWrap: `${NAME}:wordWrap`,
     panelWidth: `${NAME}:panelWidth`,
+    sidebarCollapsed: `${NAME}:sidebarCollapsed`,
     collapsedGroups: `${NAME}:collapsedGroups`,
     indentMode: `${NAME}:indentMode`,
     scrollSync: `${NAME}:scrollSync`,
+};
+export const DB = {
+    NAME: `${NAME}:history`,
+    VERSION: 1,
 };
 export const INDENT_MODES = [
     { id: 'tabs', label: 'Tabs: 4', insertSpaces: false, tabSize: 4 },

@@ -1,6 +1,8 @@
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
-import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab } from './types.js';
+import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
+import { HistoryStore } from './HistoryStore.js';
+import { HistoryPanel } from './HistoryPanel.js';
 declare global {
     interface Window {
         EveryTextLineEditor?: EveryTextLineEditor;
@@ -23,16 +25,22 @@ export declare class EveryTextLineEditor {
         from: HTMLElement;
         to: HTMLElement;
     } | null;
+    pendingDiffScrollSync: number | null;
     indentMode: IndentMode;
     selectedSidebarTab: SidebarTab;
+    selectedHistoryGroup: string;
+    historyStore: HistoryStore;
+    historyPanel?: HistoryPanel;
+    historyCommit?: HistoryCommit;
     constructor();
     inject(): Promise<void>;
     renderDrawer(): void;
     handleDrawerToggle(event: any): void;
     handleDocumentClick(event: any): void;
     renderPanel(): HTMLDivElement;
-    renderHistoryShell(): HTMLDivElement;
+    createHistoryBatchId(): string;
     setSidebarTab(tab: SidebarTab): void;
+    setSidebarCollapsed(collapsed: boolean): void;
     toggleDrawerClasses(): void;
     setUnsavedLock(isLocked: any): void;
     makeIconButton(icon: any, title: any, onClick: any): HTMLButtonElement;
@@ -40,10 +48,12 @@ export declare class EveryTextLineEditor {
     renderStatusBar(): HTMLElement;
     createCodeEditor(host: any): void;
     handleEditorKeyDown(event: KeyboardEvent): void;
+    isCaretNavigationKey(event: KeyboardEvent): boolean;
     createReadonlyEditor(host: any): void;
     bindDiffScrollSync(): void;
     applyScrollSync(from: any, to: any): void;
     syncDiffScroll(): void;
+    scheduleDiffScrollSync(): void;
     refreshSources(keepSelection?: boolean): Promise<void>;
     selectInitialSource(): Promise<void>;
     renderTree(): void;
@@ -82,10 +92,13 @@ export declare class EveryTextLineEditor {
     toggleDiff(): void;
     updateMasterScrollbarHeight(): void;
     renderDiff(): void;
-    highlightDiff(saved: any, unsaved: any): void;
-    applyDiffMarks(editor: any, marks: any, activeMark: any, spacers: any): void;
+    highlightDiff(diff: any): void;
+    applyDiffMarks(editor: any, marks: any, activeMark: any): void;
     updateDirty(isDirty: any): void;
     open(): Promise<void>;
     close(): Promise<void>;
     startResize(event: any): void;
+    refreshHistory(): Promise<void>;
+    diffHistoryCommit(commit: HistoryCommit): Promise<void>;
+    loadHistoryCommit(commit: HistoryCommit): Promise<void>;
 }

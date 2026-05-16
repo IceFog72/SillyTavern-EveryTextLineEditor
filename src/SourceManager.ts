@@ -1,13 +1,16 @@
 // @ts-ignore
-import { oai_settings, promptManager } from '../../../../openai.js';
+import { oai_settings, promptManager, openai_setting_names } from '../../../../openai.js';
 // @ts-ignore
-import { power_user } from '../../../../power-user.js';
+import { power_user, context_presets } from '../../../../power-user.js';
+// @ts-ignore
+import { selectContextPreset, selectInstructPreset, instruct_presets } from '../../../../instruct-mode.js';
 // @ts-ignore
 import { loadWorldInfo, reloadEditor, saveWorldInfo, world_names } from '../../../../world-info.js';
 // @ts-ignore
 import { saveSettingsDebounced } from '../../../../../script.js';
+import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
-import { AlignedDiff, DiffMark, TextSource } from './types.js';
+import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
 
 const GROUP_ORDER: Record<string, number> = {
     'Chat Completion Prompts': 10,
@@ -58,62 +61,78 @@ const parsePromptInjectionTriggers = (value: string): string[] => (
 export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
     const oldLines = splitLines(oldText);
     const newLines = splitLines(newText);
-    const oldMarks: DiffMark[] = Array(oldLines.length).fill('');
+    const oldDisplayLines: string[] = [];
+    const oldMarks: DiffMark[] = [];
     const newMarks: DiffMark[] = Array(newLines.length).fill('');
-    const oldSpacers: number[] = Array(oldLines.length + 1).fill(0);
-    const newSpacers: number[] = Array(newLines.length + 1).fill(0);
-
-    const maxCells = oldLines.length * newLines.length;
-    if (maxCells > 750000) {
-        // Fallback for huge files: simple line-by-line comparison
-        const maxLength = Math.max(oldLines.length, newLines.length);
-        for (let index = 0; index < maxLength; index++) {
-            if (oldLines[index] !== newLines[index]) {
-                if (index < oldLines.length) oldMarks[index] = 'removed';
-                if (index < newLines.length) newMarks[index] = 'added';
-            }
-        }
-        return { oldMarks, newMarks, oldSpacers, newSpacers };
-    }
-
-    const dp = Array.from({ length: oldLines.length + 1 }, () => Array(newLines.length + 1).fill(0));
-    for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex--) {
-        for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex--) {
-            dp[oldIndex][newIndex] = oldLines[oldIndex] === newLines[newIndex]
-                ? dp[oldIndex + 1][newIndex + 1] + 1
-                : Math.max(dp[oldIndex + 1][newIndex], dp[oldIndex][newIndex + 1]);
-        }
-    }
+    const changes = diffLines(String(oldText ?? ''), String(newText ?? ''), { ignoreNewlineAtEof: true });
 
     let oldIdx = 0;
     let newIdx = 0;
-    while (oldIdx < oldLines.length && newIdx < newLines.length) {
-        if (oldLines[oldIdx] === newLines[newIdx]) {
-            oldIdx++;
-            newIdx++;
-        } else if (dp[oldIdx + 1][newIdx] >= dp[oldIdx][newIdx + 1]) {
-            // Line removed in New (exists in Old)
-            // The New side needs a spacer at newIdx
-            newSpacers[newIdx]++;
-            oldMarks[oldIdx++] = 'removed';
-        } else {
-            // Line added in New (missing in Old)
-            // The Old side needs a spacer at oldIdx
-            oldSpacers[oldIdx]++;
-            newMarks[newIdx++] = 'added';
+
+    for (let index = 0; index < changes.length; index++) {
+        const change = changes[index];
+        const next = changes[index + 1];
+
+        if (change.removed && next?.added) {
+            alignChangedBlocks(change, next);
+            index++;
+            continue;
+        }
+
+        if (change.added && next?.removed) {
+            alignChangedBlocks(next, change);
+            index++;
+            continue;
+        }
+
+        if (change.removed) {
+            appendOldLines(change.count, 'removed');
+            oldIdx += change.count;
+            continue;
+        }
+
+        if (change.added) {
+            markLines(newMarks, newIdx, change.count, 'added');
+            appendOldBlankLines(change.count);
+            newIdx += change.count;
+            continue;
+        }
+
+        appendOldLines(change.count, '');
+        oldIdx += change.count;
+        newIdx += change.count;
+    }
+
+    return { oldMarks, newMarks, oldDisplayText: oldDisplayLines.join('\n') };
+
+    function alignChangedBlocks(removed: Change, added: Change) {
+        markLines(newMarks, newIdx, added.count, 'added');
+        appendOldLines(removed.count, 'removed');
+        appendOldBlankLines(Math.max(0, added.count - removed.count));
+
+        oldIdx += removed.count;
+        newIdx += added.count;
+    }
+
+    function appendOldLines(count = 0, mark: DiffMark) {
+        for (let index = 0; index < count && oldIdx + index < oldLines.length; index++) {
+            oldDisplayLines.push(oldLines[oldIdx + index]);
+            oldMarks.push(mark);
         }
     }
 
-    while (oldIdx < oldLines.length) {
-        newSpacers[newIdx]++;
-        oldMarks[oldIdx++] = 'removed';
+    function appendOldBlankLines(count = 0) {
+        for (let index = 0; index < count; index++) {
+            oldDisplayLines.push('');
+            oldMarks.push('added');
+        }
     }
-    while (newIdx < newLines.length) {
-        oldSpacers[oldIdx]++;
-        newMarks[newIdx++] = 'added';
-    }
+};
 
-    return { oldMarks, newMarks, oldSpacers, newSpacers };
+const markLines = (marks: DiffMark[], start: number, count: number, mark: DiffMark) => {
+    for (let index = start; index < start + count && index < marks.length; index++) {
+        marks[index] = mark;
+    }
 };
 
 const savePowerUserField = (selector: string, value: string) => {
@@ -133,23 +152,71 @@ const makeObjectFieldSource = ({ id, label, group, object, property, selector = 
     object: Record<string, any>;
     property: string;
     selector?: string | null;
-}): TextSource => ({
-    id,
-    label,
-    group,
-    readonly: false,
-    read: () => String(object?.[property] ?? ''),
-    write: (value) => {
-        object[property] = value;
-        if (selector) savePowerUserField(selector, value);
-    },
-    save: () => saveSettingsDebounced(),
-});
+}): TextSource => {
+    const branchManager = getBranchManager(group);
+    const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+    
+    return {
+        id: `${id}${branchSuffix}`,
+        label,
+        group,
+        readonly: false,
+        branchManager,
+        read: () => String(object?.[property] ?? ''),
+        write: (value) => {
+            object[property] = value;
+            if (selector) savePowerUserField(selector, value);
+        },
+        save: () => saveSettingsDebounced(),
+    };
+};
+
+const getBranchManager = (group: string): BranchManager | undefined => {
+    switch (group) {
+        case 'Chat Completion Prompts':
+            return {
+                getBranches: () => Object.keys(openai_setting_names || {}),
+                getCurrentBranch: () => oai_settings?.preset_settings_openai ?? 'Default',
+                switchBranch: async (branchName) => {
+                    if (oai_settings) {
+                        oai_settings.preset_settings_openai = branchName;
+                        const value = openai_setting_names[branchName];
+                        const select = document.querySelector<HTMLSelectElement>('#settings_preset_openai');
+                        if (select) {
+                            select.value = value;
+                            select.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                }
+            };
+        case 'Power User Context':
+            return {
+                getBranches: () => (context_presets || []).map(p => p.name),
+                getCurrentBranch: () => power_user?.context?.preset ?? 'Default',
+                switchBranch: async (branchName) => {
+                    selectContextPreset?.(branchName, { isAuto: true });
+                }
+            };
+        case 'Power User Instruct':
+            return {
+                getBranches: () => (instruct_presets || []).map(p => p.name),
+                getCurrentBranch: () => power_user?.instruct?.preset ?? 'Default',
+                switchBranch: async (branchName) => {
+                    selectInstructPreset?.(branchName, { isAuto: true });
+                }
+            };
+        default:
+            return undefined;
+    }
+};
 
 export const getSources = async (): Promise<TextSource[]> => {
     const sources: TextSource[] = [];
 
     if (promptManager?.serviceSettings?.prompts) {
+        const branchManager = getBranchManager('Chat Completion Prompts');
+        const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
         const activeOrder = promptManager.activeCharacter
             ? promptManager.getPromptOrderForCharacter(promptManager.activeCharacter)
             : [];
@@ -159,7 +226,7 @@ export const getSources = async (): Promise<TextSource[]> => {
             const orderLabel = state ? ` #${state.index + 1}` : '';
             const enabledLabel = state ? (state.enabled ? ' enabled' : ' disabled') : '';
             sources.push({
-                id: `prompt:${prompt.identifier}`,
+                id: `prompt:${prompt.identifier}${branchSuffix}`,
                 label: `${prompt.name || prompt.identifier}${orderLabel}${enabledLabel}`,
                 group: 'Chat Completion Prompts',
                 groupOrder: GROUP_ORDER['Chat Completion Prompts'],
@@ -167,6 +234,7 @@ export const getSources = async (): Promise<TextSource[]> => {
                 readonly: false,
                 enabled: state?.enabled,
                 toggleable: !!state,
+                branchManager,
                 promptOrderEntry: state?.entry,
                 read: () => String(prompt.content ?? ''),
                 write: (value) => {
@@ -255,7 +323,7 @@ export const getSources = async (): Promise<TextSource[]> => {
                 return;
             }
             sources.push({
-                id: `prompt-order:${entry.identifier}`,
+                id: `prompt-order:${entry.identifier}${branchSuffix}`,
                 label: `${prompt?.name || entry.identifier || 'Blank prompt'} #${index + 1}${entry.enabled ? ' enabled' : ' disabled'}`,
                 group: 'Chat Completion Prompts',
                 groupOrder: GROUP_ORDER['Chat Completion Prompts'],
@@ -265,6 +333,7 @@ export const getSources = async (): Promise<TextSource[]> => {
                 placeholder: true,
                 enabled: !!entry.enabled,
                 toggleable: true,
+                branchManager,
                 promptOrderEntry: entry,
                 read: () => '',
                 write: () => { },

@@ -8,10 +8,48 @@ export type DiffMark = '' | 'added' | 'removed';
 export interface AlignedDiff {
     oldMarks: DiffMark[];
     newMarks: DiffMark[];
-    oldSpacers: number[];
-    newSpacers: number[];
+    oldDisplayText: string;
 }
 export type IndentMode = typeof INDENT_MODES[number];
+
+export interface ChangedSource {
+    source: TextSource;
+    status: 'A' | 'M' | 'D';
+}
+
+export interface HistoryCommit {
+    id: string;
+    sourceId: string;
+    sourceLabel: string;
+    sourceGroup: string;
+    createdAt: number;
+    parentId: string | null;
+    reason: 'apply' | 'restore' | 'manual';
+    content: string;
+    hash: string;
+    meta?: {
+        app?: string;
+        extensionVersion?: string;
+        sourceMeta?: string;
+        message?: string;
+        batchId?: string;
+    };
+}
+
+export interface HistorySource {
+    sourceId: string;
+    latestCommitId: string | null;
+    latestHash: string | null;
+    updatedAt: number;
+    label: string;
+    group: string;
+}
+
+export interface BranchManager {
+    getBranches(): string[];
+    getCurrentBranch(): string;
+    switchBranch(branchName: string): Promise<void> | void;
+}
 
 export interface PromptOrderEntry {
     identifier?: string;
@@ -31,6 +69,7 @@ export interface TextSource {
     enabled?: boolean;
     toggleable?: boolean;
     promptOrderEntry?: PromptOrderEntry;
+    branchManager?: BranchManager;
     meta?: string;
     read: () => string;
     write: (value: string) => void;
@@ -68,6 +107,8 @@ export interface DomRefs {
     icon?: HTMLDivElement;
     root?: HTMLDivElement;
     sidebar?: HTMLElement;
+    sidebarCollapse?: HTMLButtonElement;
+    sidebarRestore?: HTMLButtonElement;
     sidebarTabs?: HTMLDivElement;
     sidebarBody?: HTMLDivElement;
     sourcesPanel?: HTMLElement;
@@ -95,6 +136,7 @@ export interface DomRefs {
     statusWrap?: HTMLButtonElement;
     statusLanguage?: HTMLButtonElement;
     statusScrollSync?: HTMLButtonElement;
+    statusBranch?: HTMLSelectElement;
     masterScrollbar?: HTMLDivElement;
     masterScrollContent?: HTMLDivElement;
     currentProps?: HTMLDivElement;

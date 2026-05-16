@@ -25,6 +25,10 @@
     grid-template-columns: var(--etle-sidebar-width) 6px minmax(0, 1fr);
 }
 
+#etle--panel.etle--sidebarCollapsed .etle--shell {
+    grid-template-columns: 0 0 minmax(0, 1fr);
+}
+
 .etle--sidebar,
 .etle--main {
     min-height: 0;
@@ -36,6 +40,27 @@
     flex-direction: column;
     border-right: 1px solid var(--SmartThemeBorderColor);
     background: rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+}
+
+#etle--panel.etle--sidebarCollapsed .etle--sidebar {
+    border-right: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+#etle--panel.etle--sidebarCollapsed .etle--resize {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.etle--iconButton.etle--sidebarRestore {
+    flex: 0 0 auto;
+    display: none;
+}
+
+#etle--panel.etle--sidebarCollapsed .etle--iconButton.etle--sidebarRestore {
+    display: inline-flex;
 }
 
 .etle--sidebarHead,
@@ -71,21 +96,52 @@
 }
 
 .etle--sidebarTabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.25rem;
-    padding: 0.35rem;
+    display: flex;
+    flex-shrink: 0;
+    gap: 2px;
+    padding: 8px 10px 0;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor), transparent 82%);
     border-bottom: 1px solid var(--SmartThemeBorderColor);
 }
 
 .etle--sidebarTab {
+    flex: 1 1 0;
     min-width: 0;
-    min-height: 2rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.3rem;
-    padding-inline: 0.45rem;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    color: var(--SmartThemeItalicColor, var(--SmartThemeEmColor));
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+    bottom: -1px;
+    min-height: 2rem;
+    margin: unset !important;
+}
+
+.etle--sidebarTab:hover:not(.etle--activeTab) {
+    background: color-mix(in srgb, var(--SmartThemeBodyColor), white 8%);
+    color: var(--SmartThemeBodyColor);
+}
+
+.etle--sidebarTab.etle--activeTab {
+    background: var(--SmartThemeBlurTintColor);
+    border-color: var(--SmartThemeBorderColor);
+    color: var(--SmartThemeQuoteColor);
+    font-weight: 600;
+}
+
+.etle--sidebarTab span:first-child {
+    font-size: 0.9em;
+    opacity: 0.85;
 }
 
 .etle--sidebarTab span:last-child {
@@ -93,11 +149,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.etle--activeTab {
-    outline: 1px solid var(--SmartThemeQuoteColor);
-    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
 }
 
 .etle--sidebarBody,
@@ -133,9 +184,9 @@
     height: 100%;
     min-height: 0;
     display: grid;
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.45rem;
-    padding: 0.45rem;
+    padding: 0 0.45rem 0.45rem 0.45rem;
 }
 
 .etle--historySection {
@@ -425,6 +476,7 @@
 }
 
 .etle--main {
+    position: relative;
     display: flex;
     flex-direction: column;
 }
@@ -599,7 +651,8 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: #161616; /* Fallback solid dark */
+    background: #161616;
+    /* Fallback solid dark */
     background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 85%, black 15%);
 }
 
@@ -620,12 +673,26 @@
 
 .etle--showDiff .pce-line.etle--diffRemoved {
     background: rgba(164, 52, 58, 0.34);
-    box-shadow: inset 3px 0 0 rgba(255, 107, 107, 0.82);
 }
 
 .etle--showDiff .pce-line.etle--diffAdded {
     background: rgba(54, 129, 70, 0.34);
-    box-shadow: inset 3px 0 0 rgba(91, 214, 110, 0.82);
+}
+
+.etle--showDiff .pce-line.etle--diffPlaceholder {
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.etle--showDiff .pce-line.etle--diffPlaceholder::after {
+    content: '';
+    position: absolute;
+    inset: 1px 0;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(125deg,
+            rgba(255, 255, 255, 0.055) 0,
+            rgba(255, 255, 255, 0.055) 1px,
+            transparent 1px,
+            transparent 6px);
 }
 
 .etle--showDiff .pce-line.etle--diffRemoved::before {
@@ -659,6 +726,11 @@
     .etle--shell {
         grid-template-columns: 1fr;
         grid-template-rows: minmax(160px, 34%) 1fr;
+    }
+
+    #etle--panel.etle--sidebarCollapsed .etle--shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: 0 minmax(0, 1fr);
     }
 
     .etle--resize {
@@ -709,8 +781,10 @@
 }
 
 .etle--showDiff .prism-code-editor {
-    scrollbar-width: none !important; /* Firefox */
-    -ms-overflow-style: none !important; /* IE 10+ */
+    scrollbar-width: none !important;
+    /* Firefox */
+    -ms-overflow-style: none !important;
+    /* IE 10+ */
 }
 
 .etle--workspace {
@@ -786,15 +860,109 @@
     min-height: 2rem;
 }
 
-.etle--triggerSelectWrap .select2-search__field {
-    min-width: 10rem;
-}
-
-/* Editor Customizations */
 .prism-code-editor .token.tag {
     background: none !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
     margin: 0 !important;
+}
+
+.prism-code-editor,
+.prism-code-editor *,
+.prism-code-editor textarea::selection {
+    text-shadow: none !important;
+}
+
+/* Profile/preset scope and history management UI */
+.etle--statusBranchWrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-right: 0.5rem;
+    padding: 0 0.4rem;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 15%, transparent);
+    border-radius: 4px;
+}
+
+.etle--statusBranchWrapper[hidden] {
+    display: none;
+}
+
+.etle--statusBranchIcon {
+    font-size: 0.8em;
+    opacity: 0.8;
+}
+
+.etle--statusBranch {
+    background: transparent;
+    border: none;
+    color: inherit;
+    margin: unset !important;
+    font-size: inherit;
+    padding: 0;
+    cursor: pointer;
+    min-width: 80px;
+    max-width: 200px;
+    text-overflow: ellipsis;
+    outline: none;
+}
+
+.etle--statusBranch option {
+    background: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+}
+
+.etle--settingsHead {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, transparent);
+}
+
+.etle--settingsHead h4 {
+    margin: 0 0 0.25rem 0;
+}
+
+.etle--settingsHead p {
+    margin: 0;
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+.etle--settingsBody {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.etle--propGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.etle--propGroup>span {
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+/* History Navigator */
+.etle--historyNav {
+    padding: 0.25rem 0.35rem;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.etle--historySourceSelect {
+    width: 100%;
+    max-width: 100%;
+    padding: 0.15rem 0.25rem;
+    font-size: 0.82rem;
+    min-height: 1.8rem;
+}
+
+.etle--historySourceSelect optgroup {
+    background: var(--SmartThemeBlurTintColor);
+    color: var(--SmartThemeBodyColor);
+    font-style: normal;
+    font-weight: 700;
 }

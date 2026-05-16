@@ -1,5 +1,7 @@
 # Browser Git-Like History Plan
 
+See also: [Cut-Down Git History Spec](./Cut-Down-Git-History-Spec.md). That spec is the stricter source of truth for the ETLE-specific history model: source group plus active profile/preset is the repository scope, one user commit is one `batchId`, and nested rows are source snapshots/files.
+
 ## Goal
 
 Add local, browser-side history for Every Text Line Editor sources. The feature should feel like a small Git log for prompt/text sources: each successful Apply can create a recoverable commit, users can inspect old versions, diff against current text, and restore a previous version.
@@ -8,7 +10,7 @@ This is not real Git. Do not try to run Git in the browser. Implement a simple a
 
 ## Opinion
 
-This is worth doing if it stays small and boring. The extension edits important prompts, and a local history makes experimentation safer. The dangerous version is trying to build branches, merges, remotes, or a full VCS. V1 should only do linear per-source commits, diffs, restore, and cleanup.
+This is worth doing if it stays small and boring. The extension edits important prompts, and a local history makes experimentation safer. Some SillyTavern source groups are profile-backed, so history must understand source profiles/presets. The dangerous version is trying to build Git-style branches, merges, remotes, or a full VCS. V1 should only do profile-scoped linear commits, diffs, restore, and cleanup.
 
 ## Storage Choice
 
@@ -44,6 +46,7 @@ Commit record:
 interface HistoryCommit {
     id: string;              // uuid or `${Date.now()}-${random}`
     sourceId: string;        // TextSource.id
+    scopeId: string;         // active profile/preset/scope for the source
     sourceLabel: string;     // label at time of commit
     sourceGroup: string;     // group at time of commit
     createdAt: number;       // Date.now()
@@ -64,6 +67,7 @@ Source record:
 ```ts
 interface HistorySource {
     sourceId: string;
+    scopeId: string;
     latestCommitId: string | null;
     latestHash: string | null;
     updatedAt: number;
@@ -78,11 +82,72 @@ Indexes:
 commits: keyPath 'id'
 commits indexes:
   sourceId
+  scopeId
   createdAt
-  [sourceId, createdAt]
+  [sourceId, scopeId, createdAt]
 
-sources: keyPath 'sourceId'
+sources: keyPath ['sourceId', 'scopeId']
 ```
+
+## Source Profiles And Scopes
+
+Some tree groups are not a single global text surface. They are profile-backed:
+
+- Chat Completion Prompts depend on the selected completion preset.
+- Power User Context depends on the selected context preset.
+- Power User Instruct depends on the selected instruct preset.
+- Future adapters may have their own profile/preset/card scope.
+
+Treat these as **source scopes**, not Git branches in the UI.
+
+Internal shape:
+
+```ts
+interface SourceScope {
+    id: string;              // stable scope id, e.g. preset name/key
+    label: string;           // user-facing profile/preset label
+    kind: 'preset' | 'profile' | 'character' | 'world' | 'global';
+}
+
+interface SourceScopeManager {
+    getScopes(): SourceScope[];
+    getCurrentScope(): SourceScope;
+    switchScope(scopeId: string): Promise<void> | void;
+}
+```
+
+`TextSource` may expose:
+
+```ts
+scope?: SourceScope;
+scopeManager?: SourceScopeManager;
+```
+
+History identity must be:
+
+```text
+source id + scope id
+```
+
+Do not mix commits from different profiles/presets under one source timeline. A prompt named `Main Prompt` in preset A and the same prompt in preset B should have separate latest hashes and separate commit histories.
+
+User-facing wording:
+- Use "Profile", "Preset", or "Scope" depending on the adapter.
+- Do not call it a Git branch unless the UI is clearly describing the history metaphor.
+- Do not show fake remote labels like `origin/main`.
+- Do not show author/branch badges unless that data is real and useful.
+
+Workflow:
+
+```text
+user selects source group
+-> UI shows current profile/preset selector when the group supports scopes
+-> switching scope warns if editor is dirty
+-> sources refresh for that scope
+-> history panel shows commits for selected source/scope only
+```
+
+Keep the scope selector small, probably in the status bar or History/Sources header. It should not dominate the editor header.
 
 ## Snapshot Strategy
 
@@ -161,7 +226,7 @@ reason: 'restore'
 parentId: latestCommitId
 ```
 
-Do not move the history pointer backward. Git-style history should remain append-only.
+Do not move the history pointer backward. History should remain append-only per source/scope.
 
 ## UI Plan
 
@@ -196,6 +261,7 @@ Sidebar tabs:
 
 History tab content:
 - Current source name.
+- Current profile/preset/scope when applicable.
 - List of commits newest first.
 - Timestamp.
 - Reason label: Apply, Restore, Manual.
@@ -205,7 +271,7 @@ History tab content:
   - Load
   - Delete commit only if needed later, not V1 default.
 
-For V1, avoid a complex graph. Show one linear list per selected source.
+For V1, avoid a complex graph. Show one linear list per selected source/scope. A commit row may expand into a tree of edited files/sources, but there are no merge lines.
 
 The History button near Diff/Revert/Apply may simply switch the sidebar to the History tab. Do not open a second popup if the sidebar tab exists.
 
@@ -258,34 +324,34 @@ Persist it only if it feels useful. It is safe to default to `sources` on every 
 export class HistoryStore {
     open(): Promise<void>;
     commit(source: TextSource, content: string, reason: HistoryCommit['reason']): Promise<HistoryCommit | null>;
-    listCommits(sourceId: string, limit?: number): Promise<HistoryCommit[]>;
+    listCommits(sourceId: string, scopeId: string, limit?: number): Promise<HistoryCommit[]>;
     getCommit(id: string): Promise<HistoryCommit | null>;
-    pruneSource(sourceId: string, keepCount: number): Promise<number>;
+    pruneSource(sourceId: string, scopeId: string, keepCount: number): Promise<number>;
 }
 ```
 
 `EveryTextLineEditor.ts` should only call:
 
 ```ts
-await this.history.commit(source, value, 'apply');
-const commits = await this.history.listCommits(source.id);
+await this.historyStore.commit(source, value, 'apply');
+const commits = await this.historyStore.listCommits(source.id, source.scope?.id ?? 'global');
 ```
 
 ## Pruning
 
-V1 should have automatic per-source pruning.
+V1 should have automatic per-source/scope pruning.
 
 Default:
 
 ```ts
-keep last 100 commits per source
+keep last 100 commits per source/scope
 ```
 
 Make this a constant, not a UI setting yet.
 
-Prune after creating a new commit. Delete oldest commits for that source beyond the limit.
+Prune after creating a new commit. Delete oldest commits for that source/scope beyond the limit.
 
-Do not prune across all sources by total count in V1; it makes behavior harder to explain.
+Do not prune across all sources or scopes by total count in V1; it makes behavior harder to explain.
 
 ## Privacy And Scope
 
@@ -311,6 +377,7 @@ Never block editing because history storage failed.
 Manual tests:
 
 - Apply a PromptManager prompt edit, reload page, confirm a history commit exists.
+- Switch completion/context/instruct preset, edit the same apparent source, and confirm history is separate per preset.
 - Apply the same content twice, confirm only one commit is created.
 - Apply two different edits, confirm newest-first history order.
 - Open diff from a history commit, confirm old side is readonly and current side matches editor value.
@@ -329,16 +396,17 @@ Automated-ish tests:
 
 1. Add `HistoryStore.ts` with open, commit, list, get, prune.
 2. Add types in `types.ts`.
-3. Refactor the sidebar so `etle--tree` lives inside a Sources tab panel.
-4. Add History and Settings tab panels. Settings can be empty in V1.
-5. Instantiate the store in `EveryTextLineEditor`.
-6. On startup, open the store but do not block editor rendering.
-7. Hook commit after successful Apply.
-8. Add a History button that switches the sidebar to the History tab.
-9. Render commit list in the History tab for the selected source.
-10. Add diff/load actions.
-11. Add pruning.
-12. Run build checks.
+3. Add source scope/profile types and expose scope only from adapters that actually support it.
+4. Refactor the sidebar so `etle--tree` lives inside a Sources tab panel.
+5. Add History and Settings tab panels. Settings can be empty in V1.
+6. Instantiate the store in `EveryTextLineEditor`.
+7. On startup, open the store but do not block editor rendering.
+8. Hook commit after successful Apply.
+9. Add a History button that switches the sidebar to the History tab.
+10. Render commit list in the History tab for the selected source/scope.
+11. Add diff/load actions.
+12. Add pruning.
+13. Run build checks.
 
 ## Things Not To Do
 
@@ -346,7 +414,8 @@ Automated-ish tests:
 - Do not save on every keystroke.
 - Do not commit before SillyTavern save succeeds.
 - Do not overwrite current text when loading history without dirty-state confirmation.
-- Do not implement branches in V1.
+- Do not implement Git branches, merge, remotes, or branch graphs in V1.
+- Do not mix different SillyTavern profiles/presets into one history. Use source scopes.
 - Do not implement merge in V1.
 - Do not store only patches in V1.
 - Do not make history failure block normal editing.
@@ -354,6 +423,7 @@ Automated-ish tests:
 - Do not make History a separate popup while also having a History tab. Use the tab.
 - Do not put real settings into the Settings tab until there is a clear setting to expose.
 - Do not assume `source.label` is stable. Use `source.id` as identity and store label only for display.
+- Do not assume `source.id` alone is enough for profile-backed sources. Use `source.id + scope.id`.
 - Do not store object references from SillyTavern in IndexedDB. Store plain serializable records only.
 
 ## Build Checklist
