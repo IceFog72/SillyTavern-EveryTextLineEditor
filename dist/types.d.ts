@@ -3,7 +3,7 @@ export type Language = typeof LANGUAGES[number];
 export type SyncMode = typeof SYNC_MODES[number];
 export type SidebarTab = 'sources' | 'history' | 'settings';
 export type TextField = readonly [property: string, label: string, selector?: string];
-export type DiffMark = '' | 'added' | 'removed';
+export type DiffMark = '' | 'added' | 'removed' | 'placeholder';
 export interface AlignedDiff {
     oldMarks: DiffMark[];
     newMarks: DiffMark[];
@@ -108,6 +108,7 @@ export interface PrismEditorLike {
     value: string;
     textarea: HTMLTextAreaElement;
     scrollContainer: HTMLElement;
+    wrapper: HTMLElement;
     setOptions(options: Record<string, any>): void;
     update?(): void;
 }

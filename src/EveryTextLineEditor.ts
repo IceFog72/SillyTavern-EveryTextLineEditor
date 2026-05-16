@@ -1294,7 +1294,7 @@ export class EveryTextLineEditor {
             if (marks[index] === activeMark) {
                 line.classList.add(activeMark === 'added' ? 'etle--diffAdded' : 'etle--diffRemoved');
             }
-            if (activeMark === 'removed' && marks[index] === 'added') {
+            if (marks[index] === 'placeholder') {
                 line.classList.add('etle--diffPlaceholder');
             }
         });

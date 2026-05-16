@@ -92,7 +92,7 @@ export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
         }
 
         if (change.added) {
-            markLines(newMarks, newIdx, change.count, 'added');
+            markNewLines(change.count, 'added');
             appendOldBlankLines(change.count);
             newIdx += change.count;
             continue;
@@ -103,11 +103,15 @@ export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
         newIdx += change.count;
     }
 
-    return { oldMarks, newMarks, oldDisplayText: oldDisplayLines.join('\n') };
+    return {
+        oldMarks,
+        newMarks,
+        oldDisplayText: oldDisplayLines.join('\n'),
+    };
 
     function alignChangedBlocks(removed: Change, added: Change) {
-        markLines(newMarks, newIdx, added.count, 'added');
         appendOldLines(removed.count, 'removed');
+        markNewLines(added.count, 'added');
         appendOldBlankLines(Math.max(0, added.count - removed.count));
 
         oldIdx += removed.count;
@@ -124,14 +128,14 @@ export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
     function appendOldBlankLines(count = 0) {
         for (let index = 0; index < count; index++) {
             oldDisplayLines.push('');
-            oldMarks.push('added');
+            oldMarks.push('placeholder');
         }
     }
-};
 
-const markLines = (marks: DiffMark[], start: number, count: number, mark: DiffMark) => {
-    for (let index = start; index < start + count && index < marks.length; index++) {
-        marks[index] = mark;
+    function markNewLines(count = 0, mark: DiffMark) {
+        for (let index = 0; index < count && newIdx + index < newLines.length; index++) {
+            newMarks[newIdx + index] = mark;
+        }
     }
 };
 

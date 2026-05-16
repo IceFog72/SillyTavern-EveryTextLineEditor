@@ -74,7 +74,7 @@ export const getLineDiff = (oldText, newText) => {
             continue;
         }
         if (change.added) {
-            markLines(newMarks, newIdx, change.count, 'added');
+            markNewLines(change.count, 'added');
             appendOldBlankLines(change.count);
             newIdx += change.count;
             continue;
@@ -83,10 +83,14 @@ export const getLineDiff = (oldText, newText) => {
         oldIdx += change.count;
         newIdx += change.count;
     }
-    return { oldMarks, newMarks, oldDisplayText: oldDisplayLines.join('\n') };
+    return {
+        oldMarks,
+        newMarks,
+        oldDisplayText: oldDisplayLines.join('\n'),
+    };
     function alignChangedBlocks(removed, added) {
-        markLines(newMarks, newIdx, added.count, 'added');
         appendOldLines(removed.count, 'removed');
+        markNewLines(added.count, 'added');
         appendOldBlankLines(Math.max(0, added.count - removed.count));
         oldIdx += removed.count;
         newIdx += added.count;
@@ -100,13 +104,13 @@ export const getLineDiff = (oldText, newText) => {
     function appendOldBlankLines(count = 0) {
         for (let index = 0; index < count; index++) {
             oldDisplayLines.push('');
-            oldMarks.push('added');
+            oldMarks.push('placeholder');
         }
     }
-};
-const markLines = (marks, start, count, mark) => {
-    for (let index = start; index < start + count && index < marks.length; index++) {
-        marks[index] = mark;
+    function markNewLines(count = 0, mark) {
+        for (let index = 0; index < count && newIdx + index < newLines.length; index++) {
+            newMarks[newIdx + index] = mark;
+        }
     }
 };
 const savePowerUserField = (selector, value) => {
