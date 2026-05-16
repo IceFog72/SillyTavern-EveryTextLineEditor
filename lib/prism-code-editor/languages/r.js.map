@@ -1,0 +1,1 @@
+{"version":3,"file":"r.js","sources":["../../src/languages/r.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.r = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,IAAI,iBAAiB;AAAA,EAChC,MAAM;AACP,CAAC;"}

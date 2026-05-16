@@ -1,0 +1,1 @@
+{"version":3,"file":"reason.js","sources":["../../src/languages/reason.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.reason = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,SAAS,iBAAiB;"}

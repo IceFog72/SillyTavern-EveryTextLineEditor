@@ -1,0 +1,1 @@
+{"version":3,"file":"false.js","sources":["../../src/languages/false.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.false = {\r\n\tcomments: {\r\n\t\tblock: [\"{\", \"}\"],\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,QAAQ;AAAA,EACnB,UAAU;AAAA,IACT,OAAO,CAAC,KAAK,GAAG;AAAA,EACjB;AACD;"}

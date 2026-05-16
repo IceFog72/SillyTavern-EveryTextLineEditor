@@ -1,0 +1,1 @@
+{"version":3,"file":"mel.js","sources":["../../src/languages/mel.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting, clikeComment, clikeIndent } from \"./shared\"\r\n\r\nlanguageMap.mel = bracketIndenting(clikeComment, clikeIndent)\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,cAAc,WAAW;"}

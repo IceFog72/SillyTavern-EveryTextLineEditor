@@ -1,0 +1,1 @@
+{"version":3,"file":"swift.js","sources":["../../src/languages/swift.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.swift = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,QAAQ,iBAAiB;"}

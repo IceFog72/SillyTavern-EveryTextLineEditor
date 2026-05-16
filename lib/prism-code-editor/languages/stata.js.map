@@ -1,0 +1,1 @@
+{"version":3,"file":"stata.js","sources":["../../src/languages/stata.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.stata = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,QAAQ,iBAAiB;"}

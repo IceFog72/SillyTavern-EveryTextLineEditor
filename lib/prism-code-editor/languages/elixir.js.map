@@ -1,0 +1,1 @@
+{"version":3,"file":"elixir.js","sources":["../../src/languages/elixir.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.elixir = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,SAAS;AAAA,EACpB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"twig.js","sources":["../../src/languages/twig.ts"],"sourcesContent":["import { markupTemplateLang } from \"./shared\"\r\n\r\nmarkupTemplateLang(\"twig\", {\r\n\tblock: [\"{#\", \"#}\"],\r\n})\r\n"],"names":[],"mappings":";AAEA,mBAAmB,QAAQ;AAAA,EAC1B,OAAO,CAAC,MAAM,IAAI;AACnB,CAAC;"}

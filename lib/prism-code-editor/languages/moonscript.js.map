@@ -1,0 +1,1 @@
+{"version":3,"file":"moonscript.js","sources":["../../src/languages/moonscript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.moon = languageMap.moonscript = bracketIndenting({\r\n\tline: \"--\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,YAAY,aAAa,iBAAiB;AAAA,EAC5D,MAAM;AACP,CAAC;"}

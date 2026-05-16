@@ -1,0 +1,1 @@
+{"version":3,"file":"ada.js","sources":["../../src/languages/ada.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.ada = bracketIndenting({ line: \"--\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,EAAE,MAAM,MAAM;"}

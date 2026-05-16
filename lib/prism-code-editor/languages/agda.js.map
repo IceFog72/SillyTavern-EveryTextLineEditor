@@ -1,0 +1,1 @@
+{"version":3,"file":"agda.js","sources":["../../src/languages/agda.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.agda = {\r\n\tcomments: {\r\n\t\tline: \"--\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,OAAO;AAAA,EAClB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

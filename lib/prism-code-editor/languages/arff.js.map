@@ -1,0 +1,1 @@
+{"version":3,"file":"arff.js","sources":["../../src/languages/arff.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.arff = {\r\n\tcomments: {\r\n\t\tline: \"%\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,OAAO;AAAA,EAClB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

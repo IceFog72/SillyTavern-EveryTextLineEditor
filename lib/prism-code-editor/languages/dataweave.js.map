@@ -1,0 +1,1 @@
+{"version":3,"file":"dataweave.js","sources":["../../src/languages/dataweave.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.dataweave = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,YAAY,iBAAiB;"}

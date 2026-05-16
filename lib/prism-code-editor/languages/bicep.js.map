@@ -1,0 +1,1 @@
+{"version":3,"file":"bicep.js","sources":["../../src/languages/bicep.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.bicep = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,QAAQ,iBAAiB;"}

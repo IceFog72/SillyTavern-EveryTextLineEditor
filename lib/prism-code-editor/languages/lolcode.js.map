@@ -1,0 +1,1 @@
+{"version":3,"file":"lolcode.js","sources":["../../src/languages/lolcode.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.lolcode = {\r\n\tcomments: {\r\n\t\tline: \"BTW\",\r\n\t\tblock: [\"OBTW\", \"TLDR\"],\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,UAAU;AAAA,EACrB,UAAU;AAAA,IACT,MAAM;AAAA,IACN,OAAO,CAAC,QAAQ,MAAM;AAAA,EACvB;AACD;"}

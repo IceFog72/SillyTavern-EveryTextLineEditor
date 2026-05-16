@@ -1,0 +1,1 @@
+{"version":3,"file":"inform7.js","sources":["../../src/languages/inform7.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.inform7 = bracketIndenting({\r\n\tblock: [\"[\", \"]\"],\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,UAAU,iBAAiB;AAAA,EACtC,OAAO,CAAC,KAAK,GAAG;AACjB,CAAC;"}

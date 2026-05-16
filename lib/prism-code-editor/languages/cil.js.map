@@ -1,0 +1,1 @@
+{"version":3,"file":"cil.js","sources":["../../src/languages/cil.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.cil = bracketIndenting({\r\n\tline: \"//\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB;AAAA,EAClC,MAAM;AACP,CAAC;"}

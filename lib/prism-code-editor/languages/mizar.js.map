@@ -1,0 +1,1 @@
+{"version":3,"file":"mizar.js","sources":["../../src/languages/mizar.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.mizar = bracketIndenting({\r\n\tline: \"::\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,QAAQ,iBAAiB;AAAA,EACpC,MAAM;AACP,CAAC;"}

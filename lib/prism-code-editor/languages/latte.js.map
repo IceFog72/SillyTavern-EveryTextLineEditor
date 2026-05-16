@@ -1,0 +1,1 @@
+{"version":3,"file":"latte.js","sources":["../../src/languages/latte.ts"],"sourcesContent":["import { markupTemplateLang } from \"./shared\"\r\n\r\nmarkupTemplateLang(\"latte\", {\r\n\tblock: [\"{*\", \"*}\"],\r\n})\r\n"],"names":[],"mappings":";AAEA,mBAAmB,SAAS;AAAA,EAC3B,OAAO,CAAC,MAAM,IAAI;AACnB,CAAC;"}

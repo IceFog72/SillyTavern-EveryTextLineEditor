@@ -1,0 +1,1 @@
+{"version":3,"file":"styles-DkWLhBOf.js","sources":["../src/setups/styles.ts"],"sourcesContent":["import layout from \"../layout.css?inline\"\r\nimport rtlLayout from \"../rtl-layout.css?inline\"\r\nimport scroll from \"../scrollbar.css?inline\"\r\nexport default layout + rtlLayout + scroll\r\n"],"names":[],"mappings":";;;AAGA,MAAA,SAAe,SAAS,YAAY;"}

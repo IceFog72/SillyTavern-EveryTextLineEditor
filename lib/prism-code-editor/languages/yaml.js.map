@@ -1,0 +1,1 @@
+{"version":3,"file":"yaml.js","sources":["../../src/languages/yaml.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.yml = languageMap.yaml = bracketIndenting({ line: \"#\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,YAAY,OAAO,iBAAiB,EAAE,MAAM,KAAK;"}

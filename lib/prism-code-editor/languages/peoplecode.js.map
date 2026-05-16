@@ -1,0 +1,1 @@
+{"version":3,"file":"peoplecode.js","sources":["../../src/languages/peoplecode.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.pcode = languageMap.peoplecode = {\r\n\tcomments: {\r\n\t\tblock: [\"/*\", \"*/\"],\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,QAAQ,YAAY,aAAa;AAAA,EAC5C,UAAU;AAAA,IACT,OAAO,CAAC,MAAM,IAAI;AAAA,EACnB;AACD;"}

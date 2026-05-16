@@ -1,0 +1,1 @@
+{"version":3,"file":"mongodb.js","sources":["../../src/languages/mongodb.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting, clikeComment, clikeIndent } from \"./shared\"\r\n\r\nlanguageMap.mongodb = bracketIndenting(clikeComment, clikeIndent)\r\n"],"names":[],"mappings":";;AAGA,YAAY,UAAU,iBAAiB,cAAc,WAAW;"}

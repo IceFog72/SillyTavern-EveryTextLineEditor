@@ -1,0 +1,1 @@
+{"version":3,"file":"perl.js","sources":["../../src/languages/perl.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.perl = bracketIndenting({ line: \"#\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB,EAAE,MAAM,KAAK;"}

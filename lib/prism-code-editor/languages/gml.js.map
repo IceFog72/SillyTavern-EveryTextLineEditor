@@ -1,0 +1,1 @@
+{"version":3,"file":"gml.js","sources":["../../src/languages/gml.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting, clikeComment, clikeIndent } from \"./shared\"\r\n\r\nlanguageMap.gamemakerlanguage = languageMap.gml = bracketIndenting(clikeComment, clikeIndent)\r\n"],"names":[],"mappings":";;AAGA,YAAY,oBAAoB,YAAY,MAAM,iBAAiB,cAAc,WAAW;"}

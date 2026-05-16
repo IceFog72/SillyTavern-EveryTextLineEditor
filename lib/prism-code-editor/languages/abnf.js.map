@@ -1,0 +1,1 @@
+{"version":3,"file":"abnf.js","sources":["../../src/languages/abnf.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.abnf = bracketIndenting({ line: \";\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB,EAAE,MAAM,KAAK;"}

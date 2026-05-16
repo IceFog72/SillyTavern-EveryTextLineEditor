@@ -1,0 +1,1 @@
+{"version":3,"file":"aql.js","sources":["../../src/languages/aql.ts"],"sourcesContent":["import { languageMap } from \"..\";\r\nimport { bracketIndenting } from \"./shared\";\r\n\r\nlanguageMap.aql = bracketIndenting()"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB;"}

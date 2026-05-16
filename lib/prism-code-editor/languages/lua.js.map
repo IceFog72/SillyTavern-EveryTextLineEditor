@@ -1,0 +1,1 @@
+{"version":3,"file":"lua.js","sources":["../../src/languages/lua.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.lua = bracketIndenting({ line: \"--\", block: [\"--[[\", \"]]\"] })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,EAAE,MAAM,MAAM,OAAO,CAAC,QAAQ,IAAI,GAAG;"}

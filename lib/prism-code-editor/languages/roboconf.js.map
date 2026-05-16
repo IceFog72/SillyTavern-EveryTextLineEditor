@@ -1,0 +1,1 @@
+{"version":3,"file":"roboconf.js","sources":["../../src/languages/roboconf.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.roboconf = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,WAAW,iBAAiB;AAAA,EACvC,MAAM;AACP,CAAC;"}

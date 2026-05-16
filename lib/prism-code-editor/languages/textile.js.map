@@ -1,0 +1,1 @@
+{"version":3,"file":"textile.js","sources":["../../src/languages/textile.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { markupComment, markupLanguage, voidTags, xmlOpeningTag } from \"./shared\"\r\n\r\nlanguageMap.textile = markupLanguage(markupComment, xmlOpeningTag, voidTags)\r\n"],"names":[],"mappings":";;AAGA,YAAY,UAAU,eAAe,eAAe,eAAe,QAAQ;"}

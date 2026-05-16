@@ -1,0 +1,1 @@
+{"version":3,"file":"j.js","sources":["../../src/languages/j.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.j = {\r\n\tcomments: {\r\n\t\tline: \"NB.\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,IAAI;AAAA,EACf,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

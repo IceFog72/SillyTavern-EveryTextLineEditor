@@ -1,0 +1,1 @@
+{"version":3,"file":"clojure.js","sources":["../../src/languages/clojure.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.clojure = bracketIndenting({\r\n\tline: \";\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,UAAU,iBAAiB;AAAA,EACtC,MAAM;AACP,CAAC;"}

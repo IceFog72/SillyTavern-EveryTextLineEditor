@@ -1,0 +1,1 @@
+{"version":3,"file":"ftl.js","sources":["../../src/languages/ftl.ts"],"sourcesContent":["import { markupTemplateLang } from \"./shared\"\r\n\r\nmarkupTemplateLang(\"ftl\", {\r\n\tblock: [\"<#--\", \"-->\"],\r\n})\r\n"],"names":[],"mappings":";AAEA,mBAAmB,OAAO;AAAA,EACzB,OAAO,CAAC,QAAQ,KAAK;AACtB,CAAC;"}

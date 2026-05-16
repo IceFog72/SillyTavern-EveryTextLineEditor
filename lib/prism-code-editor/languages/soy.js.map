@@ -1,0 +1,1 @@
+{"version":3,"file":"soy.js","sources":["../../src/languages/soy.ts"],"sourcesContent":["import { markupTemplateLang, clikeComment } from \"./shared\"\r\n\r\nmarkupTemplateLang(\"soy\", clikeComment)\r\n"],"names":[],"mappings":";AAEA,mBAAmB,OAAO,YAAY;"}

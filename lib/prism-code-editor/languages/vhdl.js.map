@@ -1,0 +1,1 @@
+{"version":3,"file":"vhdl.js","sources":["../../src/languages/vhdl.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.vhdl = bracketIndenting({\r\n\tline: \"--\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB;AAAA,EACnC,MAAM;AACP,CAAC;"}

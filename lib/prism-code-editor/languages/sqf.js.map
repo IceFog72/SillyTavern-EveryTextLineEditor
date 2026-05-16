@@ -1,0 +1,1 @@
+{"version":3,"file":"sqf.js","sources":["../../src/languages/sqf.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.sqf = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB;"}

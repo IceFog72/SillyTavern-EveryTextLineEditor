@@ -1,0 +1,1 @@
+{"version":3,"file":"haml.js","sources":["../../src/languages/haml.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.haml = bracketIndenting({ line: \"-#\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB,EAAE,MAAM,MAAM;"}

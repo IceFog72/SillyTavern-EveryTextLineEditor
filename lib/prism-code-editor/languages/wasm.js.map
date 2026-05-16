@@ -1,0 +1,1 @@
+{"version":3,"file":"wasm.js","sources":["../../src/languages/wasm.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.wasm = {\r\n\tcomments: {\r\n\t\tline: \";;\",\r\n\t\tblock: [\"(;\", \";)\"],\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,OAAO;AAAA,EAClB,UAAU;AAAA,IACT,MAAM;AAAA,IACN,OAAO,CAAC,MAAM,IAAI;AAAA,EACnB;AACD;"}

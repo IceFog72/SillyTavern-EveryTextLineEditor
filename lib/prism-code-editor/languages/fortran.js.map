@@ -1,0 +1,1 @@
+{"version":3,"file":"fortran.js","sources":["../../src/languages/fortran.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.fortran = {\r\n\tcomments: {\r\n\t\tline: \"!\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,UAAU;AAAA,EACrB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

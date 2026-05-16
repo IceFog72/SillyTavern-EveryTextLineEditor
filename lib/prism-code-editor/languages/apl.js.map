@@ -1,0 +1,1 @@
+{"version":3,"file":"apl.js","sources":["../../src/languages/apl.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.apl = bracketIndenting({ line: \"⍝\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,EAAE,MAAM,KAAK;"}

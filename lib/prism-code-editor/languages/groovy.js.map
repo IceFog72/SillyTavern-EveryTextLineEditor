@@ -1,0 +1,1 @@
+{"version":3,"file":"groovy.js","sources":["../../src/languages/groovy.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.groovy = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,SAAS,iBAAiB;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"docker.js","sources":["../../src/languages/docker.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.dockerfile = languageMap.docker = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,aAAa,YAAY,SAAS;AAAA,EAC7C,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

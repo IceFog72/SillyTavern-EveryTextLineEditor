@@ -1,0 +1,1 @@
+{"version":3,"file":"vala.js","sources":["../../src/languages/vala.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting, clikeComment, clikeIndent } from \"./shared\"\r\n\r\nlanguageMap.vala = bracketIndenting(clikeComment, clikeIndent)\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB,cAAc,WAAW;"}

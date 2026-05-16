@@ -1,0 +1,1 @@
+{"version":3,"file":"avro-idl.js","sources":["../../src/languages/avro-idl.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.avdl = languageMap[\"avro-idl\"] = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,YAAY,UAAU,IAAI,iBAAiB;"}

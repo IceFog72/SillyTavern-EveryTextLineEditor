@@ -1,0 +1,1 @@
+{"version":3,"file":"full-BpXCZbX5.js","sources":["../src/setups/full.ts"],"sourcesContent":["import { searchWidget } from \"../extensions/search/index.js\"\r\nimport { matchTags } from \"../extensions/matchTags.js\"\r\n\r\nexport const full = () => [searchWidget(), matchTags()]\r\n"],"names":[],"mappings":";;AAGO,MAAM,OAAO,MAAM,CAAC,aAAa,GAAG,UAAW,CAAA;"}

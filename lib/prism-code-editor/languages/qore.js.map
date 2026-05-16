@@ -1,0 +1,1 @@
+{"version":3,"file":"qore.js","sources":["../../src/languages/qore.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.qore = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB;"}

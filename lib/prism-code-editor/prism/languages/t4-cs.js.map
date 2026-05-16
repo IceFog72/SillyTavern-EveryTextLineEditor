@@ -1,0 +1,1 @@
+{"version":3,"file":"t4-cs.js","sources":["../../../src/prism/languages/t4-cs.js"],"sourcesContent":["import { languages } from '../core.js';\r\nimport { createT4 } from '../utils/t4-templating.js';\r\nimport './csharp.js';\r\n\r\nlanguages.t4 = languages['t4-cs'] = createT4('csharp');\r\n"],"names":[],"mappings":";;;AAIA,UAAU,KAAK,UAAU,OAAO,IAAI,SAAS,QAAQ;"}

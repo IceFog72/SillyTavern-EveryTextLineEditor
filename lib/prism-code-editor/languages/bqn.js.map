@@ -1,0 +1,1 @@
+{"version":3,"file":"bqn.js","sources":["../../src/languages/bqn.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.bqn = bracketIndenting({ line: \"#\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,EAAE,MAAM,KAAK;"}

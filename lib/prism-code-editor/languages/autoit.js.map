@@ -1,0 +1,1 @@
+{"version":3,"file":"autoit.js","sources":["../../src/languages/autoit.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.autoit = {\r\n\tcomments: {\r\n\t\tline: \";\",\r\n\t\tblock: [\"#cs\", \"#ce\"],\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,SAAS;AAAA,EACpB,UAAU;AAAA,IACT,MAAM;AAAA,IACN,OAAO,CAAC,OAAO,KAAK;AAAA,EACrB;AACD;"}

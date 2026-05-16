@@ -1,0 +1,1 @@
+{"version":3,"file":"mata.js","sources":["../../src/languages/mata.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.mata = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"apex.js","sources":["../../src/languages/apex.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.apex = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB;"}

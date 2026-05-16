@@ -1,0 +1,1 @@
+{"version":3,"file":"systemd.js","sources":["../../src/languages/systemd.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.systemd = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,UAAU;AAAA,EACrB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

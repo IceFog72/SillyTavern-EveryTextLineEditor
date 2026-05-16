@@ -1,0 +1,1 @@
+{"version":3,"file":"smarty.js","sources":["../../src/languages/smarty.ts"],"sourcesContent":["import { markupTemplateLang } from \"./shared\"\r\n\r\nmarkupTemplateLang(\"smarty\", {\r\n\tblock: [\"{*\", \"*}\"],\r\n})\r\n"],"names":[],"mappings":";AAEA,mBAAmB,UAAU;AAAA,EAC5B,OAAO,CAAC,MAAM,IAAI;AACnB,CAAC;"}

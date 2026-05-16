@@ -1,0 +1,1 @@
+{"version":3,"file":"yang.js","sources":["../../src/languages/yang.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.yang = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,iBAAiB;"}

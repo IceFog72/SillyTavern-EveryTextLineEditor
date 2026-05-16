@@ -1,0 +1,1 @@
+{"version":3,"file":"nand2tetris-hdl.js","sources":["../../src/languages/nand2tetris-hdl.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap[\"nand2tetris-hdl\"] = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,iBAAiB,IAAI,iBAAiB;"}

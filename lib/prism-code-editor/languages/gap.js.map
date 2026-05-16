@@ -1,0 +1,1 @@
+{"version":3,"file":"gap.js","sources":["../../src/languages/gap.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.gap = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,MAAM;AAAA,EACjB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

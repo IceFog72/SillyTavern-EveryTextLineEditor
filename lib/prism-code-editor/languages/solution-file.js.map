@@ -1,0 +1,1 @@
+{"version":3,"file":"solution-file.js","sources":["../../src/languages/solution-file.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.sln = languageMap[\"solution-file\"] = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,MAAM,YAAY,eAAe,IAAI;AAAA,EAChD,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

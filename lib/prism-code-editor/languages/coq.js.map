@@ -1,0 +1,1 @@
+{"version":3,"file":"coq.js","sources":["../../src/languages/coq.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.coq = bracketIndenting({ block: [\"(*\", \"*)\"] })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,EAAE,OAAO,CAAC,MAAM,IAAI,GAAG;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"t4-vb.js","sources":["../../../src/prism/languages/t4-vb.js"],"sourcesContent":["import { languages } from '../core.js';\r\nimport { createT4 } from '../utils/t4-templating.js';\r\nimport './vbnet.js';\r\n\r\nlanguages['t4-vb'] = createT4('vbnet');\r\n"],"names":[],"mappings":";;;AAIA,UAAU,OAAO,IAAI,SAAS,OAAO;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"cypher.js","sources":["../../src/languages/cypher.ts"],"sourcesContent":["import { languageMap } from \"..\";\r\nimport { bracketIndenting } from \"./shared\";\r\n\r\nlanguageMap.cypher = bracketIndenting({ line: \"//\" })"],"names":[],"mappings":";;AAGA,YAAY,SAAS,iBAAiB,EAAE,MAAM,MAAM;"}

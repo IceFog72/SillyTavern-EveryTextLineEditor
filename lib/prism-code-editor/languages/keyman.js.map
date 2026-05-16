@@ -1,0 +1,1 @@
+{"version":3,"file":"keyman.js","sources":["../../src/languages/keyman.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.keyman = {\r\n\tcomments: {\r\n\t\tline: \"c\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,SAAS;AAAA,EACpB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

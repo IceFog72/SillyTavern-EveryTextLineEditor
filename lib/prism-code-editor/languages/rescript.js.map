@@ -1,0 +1,1 @@
+{"version":3,"file":"rescript.js","sources":["../../src/languages/rescript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.res = languageMap.rescript = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,YAAY,WAAW,iBAAiB;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"cue.js","sources":["../../src/languages/cue.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.cue = bracketIndenting({ line: \"//\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB,EAAE,MAAM,MAAM;"}

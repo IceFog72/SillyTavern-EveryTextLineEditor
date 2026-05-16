@@ -1,0 +1,1 @@
+{"version":3,"file":"json.js","sources":["../../src/languages/json.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.json = languageMap.json5 = languageMap.jsonp = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,YAAY,QAAQ,YAAY,QAAQ,iBAAiB;"}

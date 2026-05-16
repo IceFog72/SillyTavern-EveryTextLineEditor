@@ -1,0 +1,1 @@
+{"version":3,"file":"keepalived.js","sources":["../../src/languages/keepalived.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.keepalived = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,aAAa,iBAAiB;AAAA,EACzC,MAAM;AACP,CAAC;"}

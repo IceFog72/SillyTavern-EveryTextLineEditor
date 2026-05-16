@@ -1,0 +1,1 @@
+{"version":3,"file":"dns-zone-file.js","sources":["../../src/languages/dns-zone-file.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap[\"dns-zone\"] = languageMap[\"dns-zone-file\"] = {\r\n\tcomments: {\r\n\t\tline: \";\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,UAAU,IAAI,YAAY,eAAe,IAAI;AAAA,EACxD,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

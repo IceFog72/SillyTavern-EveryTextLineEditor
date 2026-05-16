@@ -1,0 +1,1 @@
+{"version":3,"file":"erlang.js","sources":["../../src/languages/erlang.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.erlang = {\r\n\tcomments: {\r\n\t\tline: \"%\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,SAAS;AAAA,EACpB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

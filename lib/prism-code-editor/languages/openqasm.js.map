@@ -1,0 +1,1 @@
+{"version":3,"file":"openqasm.js","sources":["../../src/languages/openqasm.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.qasm = languageMap.openqasm = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,YAAY,WAAW,iBAAiB;"}

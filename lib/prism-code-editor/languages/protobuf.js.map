@@ -1,0 +1,1 @@
+{"version":3,"file":"protobuf.js","sources":["../../src/languages/protobuf.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.protobuf = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,WAAW,iBAAiB;"}

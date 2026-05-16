@@ -1,0 +1,1 @@
+{"version":3,"file":"editorconfig.js","sources":["../../src/languages/editorconfig.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.editorconfig = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,eAAe;AAAA,EAC1B,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

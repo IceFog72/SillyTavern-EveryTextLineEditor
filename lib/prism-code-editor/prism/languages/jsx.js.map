@@ -1,0 +1,1 @@
+{"version":3,"file":"jsx.js","sources":["../../../src/prism/languages/jsx.js"],"sourcesContent":["import { languages } from '../core.js';\r\nimport { addJsxTag } from '../utils/jsx-shared.js';\r\nimport './javascript.js';\r\n\r\naddJsxTag(languages.js, 'jsx');\r\n"],"names":[],"mappings":";;;AAIA,UAAU,UAAU,IAAI,KAAK;"}

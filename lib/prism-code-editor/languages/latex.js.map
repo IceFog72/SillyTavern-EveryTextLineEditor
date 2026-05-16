@@ -1,0 +1,1 @@
+{"version":3,"file":"latex.js","sources":["../../src/languages/latex.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.context = languageMap.tex = languageMap.latex = bracketIndenting({ line: \"%\" })\r\n"],"names":[],"mappings":";;AAGA,YAAY,UAAU,YAAY,MAAM,YAAY,QAAQ,iBAAiB,EAAE,MAAM,KAAK;"}

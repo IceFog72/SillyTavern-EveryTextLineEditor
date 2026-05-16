@@ -1,0 +1,1 @@
+{"version":3,"file":"asciidoc.js","sources":["../../src/languages/asciidoc.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.adoc = languageMap.asciidoc = {\r\n\tcomments: {\r\n\t\tline: \"//\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,OAAO,YAAY,WAAW;AAAA,EACzC,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

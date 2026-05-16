@@ -1,0 +1,1 @@
+{"version":3,"file":"sas.js","sources":["../../src/languages/sas.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.sas = bracketIndenting({\r\n\tblock: [\"/*\", \"*/\"],\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB;AAAA,EAClC,OAAO,CAAC,MAAM,IAAI;AACnB,CAAC;"}

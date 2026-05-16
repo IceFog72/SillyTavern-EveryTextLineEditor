@@ -1,0 +1,1 @@
+{"version":3,"file":"solidity.js","sources":["../../src/languages/solidity.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting, clikeComment, clikeIndent } from \"./shared\"\r\n\r\nlanguageMap.sol = languageMap.solidity = bracketIndenting(clikeComment, clikeIndent)\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,YAAY,WAAW,iBAAiB,cAAc,WAAW;"}

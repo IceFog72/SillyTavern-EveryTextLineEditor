@@ -1,0 +1,1 @@
+{"version":3,"file":"eiffel.js","sources":["../../src/languages/eiffel.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.eiffel = bracketIndenting({\r\n\tline: \"--\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,SAAS,iBAAiB;AAAA,EACrC,MAAM;AACP,CAAC;"}

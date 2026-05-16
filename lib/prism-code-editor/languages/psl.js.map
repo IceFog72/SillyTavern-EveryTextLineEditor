@@ -1,0 +1,1 @@
+{"version":3,"file":"psl.js","sources":["../../src/languages/psl.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.psl = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,iBAAiB;AAAA,EAClC,MAAM;AACP,CAAC;"}

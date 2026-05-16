@@ -1,0 +1,1 @@
+{"version":3,"file":"brightscript.js","sources":["../../src/languages/brightscript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.brightscript = {\r\n\tcomments: { line: \"'\" },\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,eAAe;AAAA,EAC1B,UAAU,EAAE,MAAM,IAAI;AACvB;"}

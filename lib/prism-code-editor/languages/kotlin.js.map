@@ -1,0 +1,1 @@
+{"version":3,"file":"kotlin.js","sources":["../../src/languages/kotlin.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.kts = languageMap.kt = languageMap.kotlin = bracketIndenting()\r\n"],"names":[],"mappings":";;AAGA,YAAY,MAAM,YAAY,KAAK,YAAY,SAAS,iBAAiB;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"naniscript.js","sources":["../../src/languages/naniscript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.nani = languageMap.naniscript = bracketIndenting({\r\n\tline: \";\",\r\n})\r\n"],"names":[],"mappings":";;AAGA,YAAY,OAAO,YAAY,aAAa,iBAAiB;AAAA,EAC5D,MAAM;AACP,CAAC;"}

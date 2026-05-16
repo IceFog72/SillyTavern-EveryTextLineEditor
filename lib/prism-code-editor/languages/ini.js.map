@@ -1,0 +1,1 @@
+{"version":3,"file":"ini.js","sources":["../../src/languages/ini.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.ini = {\r\n\tcomments: {\r\n\t\tline: \";\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,MAAM;AAAA,EACjB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"makefile.js","sources":["../../src/languages/makefile.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.makefile = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"names":[],"mappings":";AAEA,YAAY,WAAW;AAAA,EACtB,UAAU;AAAA,IACT,MAAM;AAAA,EACP;AACD;"}

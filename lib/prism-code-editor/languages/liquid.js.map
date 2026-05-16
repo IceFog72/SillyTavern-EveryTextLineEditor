@@ -1,0 +1,1 @@
+{"version":3,"file":"liquid.js","sources":["../../src/languages/liquid.ts"],"sourcesContent":["import { markupTemplateLang } from \"./shared\"\r\n\r\nmarkupTemplateLang(\"liquid\", {\r\n\tblock: [\"{% comment %}\", \"{% endcomment %}\"],\r\n})\r\n"],"names":[],"mappings":";AAEA,mBAAmB,UAAU;AAAA,EAC5B,OAAO,CAAC,iBAAiB,kBAAkB;AAC5C,CAAC;"}
