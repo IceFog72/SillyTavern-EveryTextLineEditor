@@ -1,0 +1,11 @@
+{
+    "display_name": "Custom Parameters",
+    "loading_order": 1,
+    "requires": [],
+    "optional": [],
+    "js": "dist/index.js",
+    "author": "IceFog72",
+    "version": "0.1.0",
+    "homePage": "https://github.com/SillyTavern/SillyTavern-CustomParameters/",
+    "auto_update": true
+}
