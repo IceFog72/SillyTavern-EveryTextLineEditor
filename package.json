@@ -1,0 +1,22 @@
+{
+  "name": "sillytavern-every-text-line-editor",
+  "version": "0.1.0",
+  "description": "In-SillyTavern prompt and text source editor",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "sillytavern",
+    "extension",
+    "prompt-editor"
+  ],
+  "author": "IceFog72",
+  "license": "AGPL-3.0",
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}
