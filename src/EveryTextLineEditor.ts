@@ -12,7 +12,7 @@ import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
 
 import { NAME, STORAGE, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
-import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode } from './types.js';
+import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab } from './types.js';
 import { getCollapsedGroups, getLineDiff, getSources, setCollapsedGroups } from './SourceManager.js';
 
 // Disable tag highlighting to prevent misalignment issues
@@ -46,6 +46,7 @@ export class EveryTextLineEditor {
     scrollSyncFrame: number;
     pendingScrollSync: { from: HTMLElement; to: HTMLElement } | null;
     indentMode: IndentMode;
+    selectedSidebarTab: SidebarTab;
 
     constructor() {
         this.sources = [];
@@ -60,6 +61,7 @@ export class EveryTextLineEditor {
         this.scrollSyncFrame = 0;
         this.pendingScrollSync = null;
         this.indentMode = getIndentMode();
+        this.selectedSidebarTab = 'sources';
         const storedSync = localStorage.getItem(STORAGE.scrollSync);
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
@@ -156,10 +158,57 @@ export class EveryTextLineEditor {
         const refresh = this.makeIconButton('fa-rotate', 'Refresh sources', () => this.refreshSources(true));
         sidebarHead.append(refresh);
 
+        const tabs = document.createElement('div');
+        this.dom.sidebarTabs = tabs;
+        tabs.classList.add('etle--sidebarTabs');
+        sidebar.append(tabs);
+
+        const tabDefs: Array<[SidebarTab, string, string]> = [
+            ['sources', 'Sources', 'fa-list'],
+            ['history', 'History', 'fa-code-branch'],
+            ['settings', 'Settings', 'fa-gear'],
+        ];
+        for (const [id, label, icon] of tabDefs) {
+            const tab = document.createElement('button');
+            tab.type = 'button';
+            tab.classList.add('etle--sidebarTab', 'menu_button');
+            tab.dataset.tab = id;
+            tab.innerHTML = `<span class="fa-solid fa-fw ${icon}"></span><span></span>`;
+            tab.children[1].textContent = label;
+            tab.addEventListener('click', () => this.setSidebarTab(id));
+            tabs.append(tab);
+        }
+
+        const sidebarBody = document.createElement('div');
+        this.dom.sidebarBody = sidebarBody;
+        sidebarBody.classList.add('etle--sidebarBody');
+        sidebar.append(sidebarBody);
+
+        const sourcesPanel = document.createElement('section');
+        this.dom.sourcesPanel = sourcesPanel;
+        sourcesPanel.classList.add('etle--tabPanel', 'etle--sourcesPanel');
+        sourcesPanel.dataset.tab = 'sources';
+        sidebarBody.append(sourcesPanel);
+
         const tree = document.createElement('div');
         this.dom.tree = tree;
         tree.classList.add('etle--tree');
-        sidebar.append(tree);
+        sourcesPanel.append(tree);
+
+        const historyPanel = document.createElement('section');
+        this.dom.historyPanel = historyPanel;
+        historyPanel.classList.add('etle--tabPanel', 'etle--historyPanel');
+        historyPanel.dataset.tab = 'history';
+        historyPanel.append(this.renderHistoryShell());
+        sidebarBody.append(historyPanel);
+
+        const settingsPanel = document.createElement('section');
+        this.dom.settingsPanel = settingsPanel;
+        settingsPanel.classList.add('etle--tabPanel', 'etle--settingsPanel');
+        settingsPanel.dataset.tab = 'settings';
+        sidebarBody.append(settingsPanel);
+
+        this.setSidebarTab(this.selectedSidebarTab);
 
         const resize = document.createElement('div');
         resize.classList.add('etle--resize');
@@ -249,6 +298,146 @@ export class EveryTextLineEditor {
         this.updateStatusBar();
 
         return root;
+    }
+
+    renderHistoryShell() {
+        const root = document.createElement('div');
+        root.classList.add('etle--historyShell');
+
+        const changes = document.createElement('section');
+        changes.classList.add('etle--historySection');
+        changes.innerHTML = `
+            <button type="button" class="etle--historySectionHeader">
+                <span class="fa-solid fa-fw fa-chevron-down"></span>
+                <span>Changes</span>
+                <small>8</small>
+            </button>
+            <textarea class="text_pole etle--commitMessage" placeholder="Message (Ctrl+Enter to commit on...)"></textarea>
+            <button type="button" class="menu_button etle--commitButton">
+                <span class="fa-solid fa-fw fa-check"></span>
+                <span>Commit</span>
+                <span class="fa-solid fa-fw fa-chevron-down"></span>
+            </button>
+            <div class="etle--changeList" aria-label="Pending changes"></div>
+        `;
+        root.append(changes);
+
+        const changeList = changes.querySelector('.etle--changeList');
+        const dummyChanges = [
+            ['#', 'style.css', '', 'M'],
+            ['TS', 'EveryTextLineEditor.d.ts', 'dist', 'M'],
+            ['JS', 'EveryTextLineEditor.js', 'dist', 'M'],
+            ['JS', 'EveryTextLineEditor.js.map', 'dist', 'M'],
+            ['TS', 'types.d.ts', 'dist', 'M'],
+            ['MD', 'Browser-History-Plan.md', 'docs', 'U'],
+            ['TS', 'EveryTextLineEditor.ts', 'src', 'M'],
+            ['TS', 'types.ts', 'src', 'M'],
+        ];
+        for (const [kind, name, folder, status] of dummyChanges) {
+            const row = document.createElement('div');
+            row.classList.add('etle--historyRow');
+            row.innerHTML = `
+                <span class="etle--fileKind">${kind}</span>
+                <span class="etle--fileName"></span>
+                <small></small>
+                <span class="etle--historyActions">
+                    <span class="fa-solid fa-fw fa-file-arrow-up"></span>
+                    <span class="fa-solid fa-fw fa-rotate-left"></span>
+                    <span class="fa-solid fa-fw fa-plus"></span>
+                </span>
+                <span class="etle--fileStatus"></span>
+            `;
+            row.querySelector('.etle--fileName').textContent = name;
+            row.querySelector('small').textContent = folder;
+            row.querySelector('.etle--fileStatus').textContent = status;
+            changeList.append(row);
+        }
+
+        const graph = document.createElement('section');
+        graph.classList.add('etle--historySection', 'etle--graphSection');
+        graph.innerHTML = `
+            <button type="button" class="etle--historySectionHeader">
+                <span class="fa-solid fa-fw fa-chevron-down"></span>
+                <span>History</span>
+                <small>3</small>
+            </button>
+            <div class="etle--commitTree" aria-label="History tree"></div>
+        `;
+        root.append(graph);
+
+        const graphList = graph.querySelector('.etle--commitTree');
+        const dummyCommits = [
+            {
+                title: 'Refactor code structure for implementation',
+                time: '2 min ago',
+                files: [
+                    ['TS', 'EveryTextLineEditor.ts', 'src', 'M'],
+                    ['TS', 'types.ts', 'src', 'M'],
+                    ['#', 'style.css', '', 'M'],
+                ],
+            },
+            {
+                title: 'Add initial TypeScript configuration',
+                time: '18 min ago',
+                files: [
+                    ['TS', 'index.ts', 'src', 'A'],
+                    ['{}', 'tsconfig.json', '', 'A'],
+                    ['{}', 'package.json', '', 'M'],
+                ],
+            },
+            {
+                title: 'Update manifest for editor entrypoint',
+                time: '34 min ago',
+                files: [
+                    ['{}', 'manifest.json', '', 'M'],
+                    ['JS', 'index.js', '', 'A'],
+                ],
+            },
+        ];
+        for (const commit of dummyCommits) {
+            const item = document.createElement('details');
+            item.classList.add('etle--commitItem');
+            item.open = true;
+            item.innerHTML = `
+                <summary class="etle--commitRow">
+                    <span class="fa-solid fa-fw fa-chevron-right etle--commitChevron"></span>
+                    <span class="etle--commitTitle"></span>
+                    <small></small>
+                </summary>
+                <div class="etle--commitFiles"></div>
+            `;
+            item.querySelector('.etle--commitTitle').textContent = commit.title;
+            item.querySelector('small').textContent = commit.time;
+            const files = item.querySelector('.etle--commitFiles');
+            for (const [kind, name, folder, status] of commit.files) {
+                const file = document.createElement('div');
+                file.classList.add('etle--commitFile');
+                file.innerHTML = `
+                    <span class="etle--fileKind"></span>
+                    <span class="etle--fileName"></span>
+                    <small></small>
+                    <span class="etle--fileStatus"></span>
+                `;
+                file.querySelector('.etle--fileKind').textContent = kind;
+                file.querySelector('.etle--fileName').textContent = name;
+                file.querySelector('small').textContent = folder;
+                file.querySelector('.etle--fileStatus').textContent = status;
+                files.append(file);
+            }
+            graphList.append(item);
+        }
+
+        return root;
+    }
+
+    setSidebarTab(tab: SidebarTab) {
+        this.selectedSidebarTab = tab;
+        this.dom.sidebarTabs?.querySelectorAll<HTMLButtonElement>('.etle--sidebarTab').forEach(button => {
+            button.classList.toggle('etle--activeTab', button.dataset.tab === tab);
+        });
+        this.dom.sidebarBody?.querySelectorAll<HTMLElement>('.etle--tabPanel').forEach(panel => {
+            panel.hidden = panel.dataset.tab !== tab;
+        });
     }
 
     toggleDrawerClasses() {
@@ -388,6 +577,7 @@ export class EveryTextLineEditor {
             defaultCommands(),
         );
 
+        this.editor.textarea.addEventListener('keydown', (event) => this.handleEditorKeyDown(event), { capture: true });
         setSlashCommandAutoComplete(this.editor.textarea, true).then((autocomplete) => {
             this.editor.textarea.addEventListener('keydown', (event) => autocomplete.handleKeyDown(event), { capture: true });
         }).catch(() => { });
@@ -395,6 +585,14 @@ export class EveryTextLineEditor {
         this.editor.textarea.addEventListener('click', () => this.updateStatusBar());
         this.editor.textarea.addEventListener('select', () => this.updateStatusBar());
         this.editor.textarea.addEventListener('input', () => this.updateStatusBar());
+    }
+
+    handleEditorKeyDown(event: KeyboardEvent) {
+        const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
+        if (!isSave) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        this.apply().catch((error) => console.error(`[${NAME}] Failed to save from keyboard shortcut`, error));
     }
 
     createReadonlyEditor(host) {

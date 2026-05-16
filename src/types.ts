@@ -2,6 +2,7 @@ import { INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 
 export type Language = typeof LANGUAGES[number];
 export type SyncMode = typeof SYNC_MODES[number];
+export type SidebarTab = 'sources' | 'history' | 'settings';
 export type TextField = readonly [property: string, label: string, selector?: string];
 export type DiffMark = '' | 'added' | 'removed';
 export interface AlignedDiff {
@@ -67,6 +68,11 @@ export interface DomRefs {
     icon?: HTMLDivElement;
     root?: HTMLDivElement;
     sidebar?: HTMLElement;
+    sidebarTabs?: HTMLDivElement;
+    sidebarBody?: HTMLDivElement;
+    sourcesPanel?: HTMLElement;
+    historyPanel?: HTMLElement;
+    settingsPanel?: HTMLElement;
     tree?: HTMLDivElement;
     currentGroup?: HTMLDivElement;
     currentTitleRow?: HTMLDivElement;

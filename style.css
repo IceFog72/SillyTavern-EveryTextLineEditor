@@ -70,6 +70,245 @@
     flex: 1;
 }
 
+.etle--sidebarTabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.25rem;
+    padding: 0.35rem;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.etle--sidebarTab {
+    min-width: 0;
+    min-height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding-inline: 0.45rem;
+}
+
+.etle--sidebarTab span:last-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etle--activeTab {
+    outline: 1px solid var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
+}
+
+.etle--sidebarBody,
+.etle--tabPanel {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+}
+
+.etle--sidebarBody {
+    display: flex;
+    flex-direction: column;
+}
+
+.etle--tabPanel {
+    overflow: hidden;
+}
+
+.etle--tabPanel[hidden] {
+    display: none;
+}
+
+.etle--sourcesPanel {
+    display: flex;
+    flex-direction: column;
+}
+
+.etle--historyPanel {
+    overflow: hidden;
+}
+
+.etle--historyShell {
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.45rem;
+    padding: 0.45rem;
+}
+
+.etle--historySection {
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.etle--graphSection {
+    margin-top: 0;
+}
+
+.etle--historySectionHeader {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0;
+    border: 0;
+    color: var(--SmartThemeBodyColor);
+    background: transparent;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.etle--historySectionHeader small {
+    min-width: 1.25rem;
+    min-height: 1.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: color-mix(in srgb, #2eaadc 72%, transparent);
+    color: white;
+    font-size: 0.72rem;
+    text-transform: none;
+}
+
+.etle--commitMessage {
+    width: 100%;
+    min-height: 2.15rem;
+    max-height: 4rem;
+    resize: none;
+    margin: 0.15rem 0 0.35rem;
+}
+
+.etle--commitButton {
+    width: 100%;
+    min-height: 2rem;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    margin-bottom: 0.35rem;
+    background: color-mix(in srgb, #2eaadc 72%, transparent);
+}
+
+.etle--commitButton span:first-child {
+    justify-self: end;
+}
+
+.etle--commitButton span:nth-child(2) {
+    justify-self: start;
+}
+
+.etle--changeList,
+.etle--commitTree {
+    min-width: 0;
+    overflow: auto;
+}
+
+.etle--historyRow,
+.etle--commitRow,
+.etle--commitFile {
+    min-height: 1.35rem;
+    display: grid;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.82rem;
+}
+
+.etle--historyRow {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto auto 1.1rem;
+}
+
+.etle--historyRow:hover {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 16%, transparent);
+}
+
+.etle--fileKind {
+    color: #54b6ff;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.etle--fileName,
+.etle--commitTitle {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.etle--historyRow small,
+.etle--commitRow small,
+.etle--commitFile small {
+    color: var(--SmartThemeEmColor);
+}
+
+.etle--historyActions {
+    display: none;
+    align-items: center;
+    gap: 0.15rem;
+    color: var(--SmartThemeBodyColor);
+}
+
+.etle--historyRow:hover .etle--historyActions {
+    display: inline-flex;
+}
+
+.etle--fileStatus {
+    color: #d7b85a;
+    text-align: center;
+}
+
+.etle--commitItem {
+    min-width: 0;
+}
+
+.etle--commitItem summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.etle--commitItem summary::-webkit-details-marker {
+    display: none;
+}
+
+.etle--commitRow {
+    grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+    color: var(--SmartThemeBodyColor);
+}
+
+.etle--commitRow:hover,
+.etle--commitFile:hover {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 16%, transparent);
+}
+
+.etle--commitChevron {
+    color: var(--SmartThemeEmColor);
+    transition: transform 120ms ease;
+}
+
+.etle--commitItem[open] .etle--commitChevron {
+    transform: rotate(90deg);
+}
+
+.etle--commitFiles {
+    margin-left: 1.25rem;
+    padding-left: 0.45rem;
+    border-left: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 55%, transparent);
+}
+
+.etle--commitFile {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto 1.1rem;
+}
+
 .etle--tree {
     flex: 1;
     min-height: 0;
@@ -322,6 +561,11 @@
     padding: 0 0.4rem;
     cursor: pointer;
     letter-spacing: 0;
+}
+
+.etle--statusItem[hidden],
+.etle--statusButton[hidden] {
+    display: none;
 }
 
 .etle--statusButton:hover,

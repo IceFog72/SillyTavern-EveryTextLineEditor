@@ -1,6 +1,6 @@
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
-import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode } from './types.js';
+import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab } from './types.js';
 declare global {
     interface Window {
         EveryTextLineEditor?: EveryTextLineEditor;
@@ -24,18 +24,22 @@ export declare class EveryTextLineEditor {
         to: HTMLElement;
     } | null;
     indentMode: IndentMode;
+    selectedSidebarTab: SidebarTab;
     constructor();
     inject(): Promise<void>;
     renderDrawer(): void;
     handleDrawerToggle(event: any): void;
     handleDocumentClick(event: any): void;
     renderPanel(): HTMLDivElement;
+    renderHistoryShell(): HTMLDivElement;
+    setSidebarTab(tab: SidebarTab): void;
     toggleDrawerClasses(): void;
     setUnsavedLock(isLocked: any): void;
     makeIconButton(icon: any, title: any, onClick: any): HTMLButtonElement;
     makeTextButton(text: any, icon: any, onClick: any): HTMLButtonElement;
     renderStatusBar(): HTMLElement;
     createCodeEditor(host: any): void;
+    handleEditorKeyDown(event: KeyboardEvent): void;
     createReadonlyEditor(host: any): void;
     bindDiffScrollSync(): void;
     applyScrollSync(from: any, to: any): void;
