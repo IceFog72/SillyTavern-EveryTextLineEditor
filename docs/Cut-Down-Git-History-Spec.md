@@ -9,8 +9,17 @@ This is not real Git. It is a browser-local safety system for prompt editing:
 - show what text sources changed,
 - save those changed sources under one commit,
 - inspect older commits,
-- diff old text against current text,
-- load old text back into the editor without auto-saving.
+- compare any old file snapshot from any old commit with the current editable editor value for that same source,
+- load old text back into the current SillyTavern working state,
+- export/import local history later.
+
+The main purpose of history is comparison. A user should be able to answer:
+
+```text
+What did this prompt/source look like in that old commit, compared with what it is now?
+```
+
+Loading old text is secondary. The primary workflow is old snapshot vs current editor diff.
 
 The UI may borrow Git terms where they are helpful, but it must not pretend to have remotes, merges, authors, or full branch mechanics.
 
@@ -20,36 +29,47 @@ Map Git concepts to ETLE concepts like this:
 
 | Git concept | ETLE concept |
 | --- | --- |
-| Repository | One source group in one active scope/profile/preset |
-| Branch | Active SillyTavern profile/preset/scope, only when the adapter really has one |
+| Repository | One logical SillyTavern namespace/profile/preset |
+| Branch | A real SillyTavern profile/preset/scope, only when the adapter really has one |
 | File | One `TextSource` |
 | Working tree | Current saved SillyTavern source values visible to ETLE |
 | Staged changes | Not in V1 |
-| Commit | One user-created batch containing snapshots of all changed sources in the current repository |
+| Commit | One user-created batch containing snapshots of all changed sources in the current namespace |
 | Commit file list | The sources included in that batch |
-| Diff | Snapshot text vs current editor/source text |
-| Checkout/restore | Load a snapshot into the editor and mark it dirty |
+| Diff | Snapshot text from an old commit vs current editable editor text for the same source |
+| Checkout/restore | Load a snapshot or commit back into the current working state, then leave it as uncommitted changes |
 
 Important: ETLE should behave like "git without staging," but only for saved source values. Unsaved editor typing is not part of the history working tree until the user clicks Apply.
 
 ## Repository Scope
 
-A repository scope is:
+A repository scope is the smallest logical SillyTavern area that should have its own independent history:
 
 ```text
-source group + active scope/profile/preset
+namespace type + namespace id
 ```
 
 Examples:
 
-- `Chat Completion Prompts + IceChatCPv34`
-- `Power User Instruct + Alpaca`
-- `Power User Context + Default`
-- `Persona + current persona`
-- `World Info + selected world`
-- `Global Settings + global`
+- `openai-preset:IceChatCPv34`
+- `instruct-template:Alpaca`
+- `context-template:Default`
+- `sysprompt:Creative Writer`
+- `world:Eldoria`
+- `persona:current persona id`
+- `global:global`
 
-If a source group has no profile/preset, use `global` as the scope id.
+Source groups map into scopes:
+
+- `Chat Completion Prompts`, `Utility Prompts`, and `Formatting Prompts` use the active OpenAI/chat-completion preset scope.
+- `Power User Instruct` uses the active instruct template scope.
+- `Power User Context` uses the active context template scope.
+- `System Prompt` uses the active system prompt preset scope.
+- `World/Lorebook` entries use the world/lorebook name scope.
+- Persona sources use the persona/profile scope when implemented.
+- Sources with no real profile/preset use `global`.
+
+Do not make one flat global history for all prompt sources. Histories must be separate per scope so a user can reason about one preset/profile at a time.
 
 Do not show fake Git remotes like `origin/main`.
 Do not show fake author names.
@@ -65,10 +85,11 @@ Logical commit:
 interface HistoryBatch {
     id: string;                 // batchId
     scopeId: string;            // active repository scope
-    group: string;              // source group
+    scopeType: string;          // openai-preset, instruct-template, sysprompt, world, etc.
+    scopeLabel: string;         // user-visible preset/profile/world label
     message: string;
     createdAt: number;
-    reason: 'manual' | 'apply' | 'restore';
+    reason: 'manual' | 'initial' | 'load';
     files: HistorySnapshot[];
 }
 ```
@@ -83,9 +104,11 @@ interface HistorySnapshot {
     sourceLabel: string;
     sourceGroup: string;
     scopeId: string;
+    scopeType: string;
+    scopeLabel: string;
     createdAt: number;
     parentId: string | null;    // previous snapshot for this source + scope
-    reason: 'manual' | 'apply' | 'restore';
+    reason: 'manual' | 'initial' | 'load';
     content: string;
     hash: string;
 }
@@ -110,7 +133,7 @@ It must not show five separate top-level commits.
 
 For the active repository scope:
 
-1. Read every writable, non-placeholder source in the active group/scope.
+1. Read every writable, non-placeholder source in the active scope.
 2. Always use the saved backing value from `source.read()`.
 3. Hash current text.
 4. Compare with the latest stored hash for `sourceId + scopeId`.
@@ -120,6 +143,12 @@ For the active repository scope:
    - `D` is reserved for future source deletion support.
 
 The Changes list is the saved working tree status for the active repository.
+
+External change rule:
+
+- ETLE must not care whether a changed value came from ETLE or from another SillyTavern UI.
+- If the current saved source value differs from the latest committed snapshot, show it in Changes.
+- If an external edit changes it back to the latest committed snapshot, remove it from Changes.
 
 Unsaved editor buffer rule:
 
@@ -159,7 +188,14 @@ user edits one or more sources
 
 Commit must not save unsaved editor text to SillyTavern and must not snapshot unsaved editor text. History is a snapshot of saved ETLE-visible source values. The editor still keeps explicit Apply semantics for real SillyTavern persistence.
 
-If later we want Apply to auto-create history, that must still use one batch per Apply action and must run only after `source.save()` succeeds.
+Apply must not auto-create commits. Commits happen only when the user clicks Commit.
+
+Commit message rules:
+
+- Message is optional.
+- If the user leaves it empty, auto-generate a message from changed source names.
+- Example: `Update <user>, </user>, Story String`.
+- Keep the auto-generated message short; truncate long file lists with a count suffix.
 
 ## History UI
 
@@ -188,65 +224,122 @@ History:
 - newest commit first,
 - top-level row is the commit,
 - nested rows are source snapshots in that commit,
-- each nested row can offer Diff and Load actions.
+- clicking a nested snapshot row should default to comparing that old file with the current saved file,
+- each nested row can offer explicit Compare and Load File actions,
+- each top-level row can offer Load Commit when all target sources still exist.
 
 Top-level commit title:
 
 - use message when present,
 - otherwise use `Manual commit`,
 - use `Initial commit` for the first baseline batch,
-- use `Restore` only for restore-generated commits.
+- use `Load` only for commits created after loading old history into the working state and committing that result.
 
 Do not use raw message values like `1` as the only visible structure if it makes the tree unreadable. The row may show the message, but it still needs file rows nested under it.
 
 ## Diff Workflow
 
+Diff is the main History feature.
+
 For a snapshot row:
 
 ```text
-Diff
+Compare
 ```
 
-opens split diff:
+opens split diff between that historical file and the current editable editor value for the same source:
 
 - left editor = snapshot content,
-- right editor = current editor/source content,
+- right editor = current editor buffer,
 - left editor readonly,
 - right editor editable if the current source is editable,
 - scroll sync works only while diff view is visible.
 
+If the selected history snapshot belongs to the current source, do not discard unsaved edits. Compare the old snapshot against the current editor buffer exactly as it is.
+
 If the snapshot source is not the currently selected source:
 
 1. select that source first,
-2. load current source content into the right editor,
-3. put snapshot content into the left editor,
-4. show diff mode.
+2. if the current editor is dirty, ask Save / Discard / Cancel before switching sources,
+3. load the selected source into the right editor,
+4. keep the right editor editable,
+5. put snapshot content into the left editor,
+6. show diff mode.
 
 Do not diff a snapshot against the wrong current source.
+
+If the snapshot's source no longer exists in the current SillyTavern state:
+
+- still allow viewing the historical content,
+- show the right side as missing/unavailable,
+- do not pretend the comparison is live,
+- disable editing and Load unless the source can be matched again.
+
+Working Changes comparison:
+
+- clicking a changed file in Changes compares latest committed snapshot vs current editor text.
+- if there is no previous snapshot, left side should show an empty/new-file state and right side should show current editor text.
+
+Old commit comparison:
+
+- clicking a file in an old commit compares that old snapshot vs current editor text for that source, not vs the commit's parent.
+- parent-vs-child historical diff can be a later feature, but it is not the default purpose of the History tab.
+
+The user should never need to load an old version just to compare it with current.
 
 ## Load Workflow
 
 For a snapshot row:
 
 ```text
-Load
+Load File
 ```
 
-means "load this old text into the editor." It does not mean "save immediately."
+means "load this old text back into the current working state."
 
 Flow:
 
 ```text
-user clicks Load
+user clicks Load File
 -> if current editor is dirty, ask Save / Discard / Cancel
 -> select snapshot source if needed
 -> set editor text to snapshot content
 -> mark dirty
 -> user can inspect/edit
 -> user clicks Apply to persist
+-> source appears in Changes if it differs from latest committed snapshot
 ```
 
 This is equivalent to Git restore into the working tree, not moving the commit pointer backward.
+
+For a top-level commit row:
+
+```text
+Load Commit
+```
+
+means "load every still-existing file from this commit into the current working state."
+
+Flow:
+
+```text
+user clicks Load Commit
+-> if current editor is dirty, ask Save / Discard / Cancel
+-> for every file in commit that still has a live writable source:
+   -> write snapshot content to that source
+   -> call the source save path
+-> skip missing/deleted sources and report the skipped count
+-> refresh Changes
+```
+
+Loading a commit is not rollback. It creates saved working-tree changes that wait for a new Commit.
+
+Avoid the label `Restore` in the UI because users may read it as destructive rollback. Prefer:
+
+- `Load File`
+- `Load Commit`
+- `Commit Changes`
+- `Working Changes`
 
 ## Scope/Profile Selector
 
@@ -260,6 +353,25 @@ Rules:
 - the UI label should match the domain, for example `Preset`, `Profile`, or `World`.
 
 This is the closest ETLE has to branches, but user-facing behavior is still "switch profile/preset", not Git branch management.
+
+## Archived Scopes
+
+History must outlive current SillyTavern presets/profiles.
+
+If a profile, preset, world, or other scope was deleted from SillyTavern:
+
+- keep its history visible,
+- mark the scope as archived/read-only,
+- allow browsing commits,
+- allow expanding files,
+- allow viewing old content/diffs when meaningful,
+- allow export,
+- disable new commits into that scope,
+- disable Load File / Load Commit unless the target live sources exist again.
+
+The archived state is computed from current SillyTavern sources. It is not permanent metadata.
+
+If a matching scope appears again later with the same stable scope id, the history becomes active again and committing/loading can work again.
 
 ## Storage Rules
 
@@ -292,6 +404,54 @@ sourceId + scopeId
 ```
 
 Do not key latest source state by `sourceId` alone, because prompt presets/profiles can share the same apparent source ids.
+
+Keep scope metadata keyed by:
+
+```text
+scopeId
+```
+
+Scope metadata should include:
+
+```ts
+interface HistoryScope {
+    scopeId: string;
+    scopeType: string;
+    scopeLabel: string;
+    lastSeenAt: number;
+}
+```
+
+Do not store `active` as durable truth. Compute active/archived by comparing stored scopes against currently discovered ETLE scopes.
+
+## Export / Import
+
+Export/import is not required for the first working version, but the storage shape must not block it.
+
+Export should support:
+
+- one active scope,
+- one archived scope,
+- all ETLE history.
+
+Export file should contain:
+
+- schema version,
+- exportedAt timestamp,
+- extension name/version when available,
+- scopes,
+- batches,
+- snapshots.
+
+Import should:
+
+- validate schema version,
+- avoid overwriting existing history silently,
+- preserve archived scopes,
+- merge by stable ids where possible,
+- assign new ids if imported ids conflict with different content.
+
+Do not export SillyTavern secrets or unrelated settings.
 
 ## Pruning
 
@@ -331,6 +491,13 @@ Missing source:
 - allow Diff only if meaningful,
 - Load should be disabled unless the source can be matched again.
 
+Deleted scope/profile/preset:
+
+- old history remains visible as archived history,
+- Commit is disabled for that scope,
+- Load File and Load Commit are disabled unless matching live writable sources exist again,
+- export remains enabled.
+
 Readonly source:
 
 - never commit,
@@ -355,6 +522,7 @@ IndexedDB failure:
 - no staging area in V1,
 - no branch graph lines unless they represent real ETLE profile/scope history,
 - no automatic commit on every keystroke,
+- no automatic commit on Apply,
 - no committing failed saves as successful history,
 - no mixing histories across presets/profiles.
 
@@ -386,3 +554,18 @@ IndexedDB failure:
 
 9. Clear/browser-block IndexedDB.
    - Expected: ETLE editor still works, history area gracefully warns or appears empty.
+
+10. Edit a source externally in SillyTavern.
+   - Expected: ETLE shows it in Changes when it differs from the latest committed snapshot.
+
+11. Edit a changed source back to its latest committed text and Apply.
+   - Expected: the source disappears from Changes.
+
+12. Commit with an empty message.
+   - Expected: commit message is auto-generated from changed source names.
+
+13. Delete a preset/profile in SillyTavern after it has history.
+   - Expected: old history remains visible as archived/read-only; Commit is disabled.
+
+14. Load a whole old commit.
+   - Expected: existing writable files are written to ST, missing files are skipped, and resulting changes wait for a new Commit.

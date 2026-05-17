@@ -10,7 +10,7 @@ import { highlightBracketPairs } from './vendor/prism-code-editor/extensions/mat
 import { searchWidget } from './vendor/prism-code-editor/extensions/search/index.js';
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
-import { NAME, STORAGE, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
+import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 import { getCollapsedGroups, getLineDiff, getSources, setCollapsedGroups } from './SourceManager.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
@@ -22,6 +22,46 @@ const getIndentMode = () => {
     const stored = localStorage.getItem(STORAGE.indentMode);
     return INDENT_MODES.find(mode => mode.id === stored) ?? INDENT_MODES[0];
 };
+const getEditorEngine = () => {
+    const stored = localStorage.getItem(STORAGE.editorEngine);
+    return EDITOR_ENGINES.find(engine => engine.id === stored) ?? EDITOR_ENGINES[0];
+};
+const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
+const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
+let monacoLoadPromise = null;
+const loadMonaco = async () => {
+    if (globalThis.monaco?.editor)
+        return globalThis.monaco;
+    if (monacoLoadPromise)
+        return monacoLoadPromise;
+    monacoLoadPromise = new Promise((resolve, reject) => {
+        const configure = () => {
+            const requirejs = globalThis.require;
+            if (!requirejs?.config) {
+                reject(new Error('Monaco AMD loader did not initialize.'));
+                return;
+            }
+            const vsPath = new URL('./vendor/monaco-editor/min/vs', import.meta.url).toString();
+            requirejs.config({ paths: { vs: vsPath } });
+            requirejs(['vs/editor/editor.main'], () => {
+                if (globalThis.monaco?.editor)
+                    resolve(globalThis.monaco);
+                else
+                    reject(new Error('Monaco editor API was not found after loading.'));
+            }, reject);
+        };
+        if (globalThis.require?.config) {
+            configure();
+            return;
+        }
+        const loader = document.createElement('script');
+        loader.src = new URL('./vendor/monaco-editor/min/vs/loader.js', import.meta.url).toString();
+        loader.onload = configure;
+        loader.onerror = () => reject(new Error('Failed to load Monaco AMD loader.'));
+        document.head.append(loader);
+    });
+    return monacoLoadPromise;
+};
 export class EveryTextLineEditor {
     sources;
     selectedSource;
@@ -29,9 +69,14 @@ export class EveryTextLineEditor {
     collapsedGroups;
     currentLanguage = LANGUAGES[0];
     scrollSyncMode = SYNC_MODES[1];
+    editorEngine = EDITOR_ENGINES[0];
     dom;
     editor;
     oldEditor;
+    editorReady;
+    monacoDiffEditor;
+    monacoDiffOriginalModel;
+    monacoDiffModifiedModel;
     diffOpen;
     isSyncingScroll;
     scrollSyncFrame;
@@ -51,12 +96,17 @@ export class EveryTextLineEditor {
         this.dom = {};
         this.editor = null;
         this.oldEditor = null;
+        this.editorReady = Promise.resolve();
+        this.monacoDiffEditor = null;
+        this.monacoDiffOriginalModel = null;
+        this.monacoDiffModifiedModel = null;
         this.diffOpen = false;
         this.isSyncingScroll = false;
         this.scrollSyncFrame = 0;
         this.pendingScrollSync = null;
         this.pendingDiffScrollSync = null;
         this.indentMode = getIndentMode();
+        this.editorEngine = getEditorEngine();
         this.selectedSidebarTab = 'sources';
         this.selectedHistoryGroup = '';
         this.historyStore = new HistoryStore();
@@ -65,6 +115,7 @@ export class EveryTextLineEditor {
     }
     async inject() {
         this.renderDrawer();
+        await this.editorReady;
         await this.refreshSources();
     }
     renderDrawer() {
@@ -191,13 +242,95 @@ export class EveryTextLineEditor {
         this.dom.settingsPanel = settingsPanel;
         settingsPanel.classList.add('etle--tabPanel', 'etle--settingsPanel');
         settingsPanel.dataset.tab = 'settings';
-        // Add placeholders for History Management
         const settingsHead = document.createElement('div');
         settingsHead.classList.add('etle--settingsHead');
-        settingsHead.innerHTML = '<h4>History Management</h4><p>These features are planned but not yet implemented.</p>';
+        settingsHead.innerHTML = '<h4>Settings</h4><p>Editor preferences and local history controls.</p>';
         settingsPanel.append(settingsHead);
         const settingsBody = document.createElement('div');
         settingsBody.classList.add('etle--settingsBody');
+        const editorGroup = this.createPropGroup('Editor');
+        const wrapButton = this.makeTextButton('Word Wrap', 'fa-align-left', () => this.setWordWrap(!JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true')));
+        wrapButton.dataset.setting = 'wrap';
+        const spellButton = this.makeTextButton('Spell Check', 'fa-spell-check', () => this.setSpellCheck(!isSpellCheckEnabled()));
+        spellButton.dataset.setting = 'spell';
+        const minimapButton = this.makeTextButton('Monaco Minimap', 'fa-map', () => this.setMonacoMinimap(!isMonacoMinimapEnabled()));
+        minimapButton.dataset.setting = 'minimap';
+        const editorButtons = document.createElement('div');
+        editorButtons.classList.add('etle--settingsButtonRow');
+        editorButtons.append(wrapButton, spellButton, minimapButton);
+        editorGroup.append(editorButtons);
+        settingsBody.append(editorGroup);
+        const engineGroup = this.createPropGroup('Editor Engine');
+        const engineSelect = document.createElement('select');
+        this.dom.editorEngine = engineSelect;
+        engineSelect.classList.add('text_pole');
+        for (const engine of EDITOR_ENGINES) {
+            const option = document.createElement('option');
+            option.value = engine.id;
+            option.textContent = engine.label;
+            engineSelect.append(option);
+        }
+        engineSelect.value = this.editorEngine.id;
+        engineSelect.addEventListener('change', () => {
+            const engine = EDITOR_ENGINES.find(item => item.id === engineSelect.value) ?? EDITOR_ENGINES[0];
+            this.setEditorEngine(engine).catch((error) => {
+                console.error(`[${NAME}] Failed to switch editor engine`, error);
+                engineSelect.value = this.editorEngine.id;
+            });
+        });
+        engineGroup.append(engineSelect);
+        settingsBody.append(engineGroup);
+        const indentGroup = this.createPropGroup('Indentation');
+        const indentSelect = document.createElement('select');
+        indentSelect.classList.add('text_pole');
+        for (const mode of INDENT_MODES) {
+            const option = document.createElement('option');
+            option.value = mode.id;
+            option.textContent = mode.label;
+            indentSelect.append(option);
+        }
+        indentSelect.value = this.indentMode.id;
+        indentSelect.addEventListener('change', () => {
+            const mode = INDENT_MODES.find(item => item.id === indentSelect.value) ?? INDENT_MODES[0];
+            this.indentMode = mode;
+            localStorage.setItem(STORAGE.indentMode, mode.id);
+            this.editor?.setOptions({ insertSpaces: mode.insertSpaces, tabSize: mode.tabSize });
+            this.oldEditor?.setOptions({ insertSpaces: mode.insertSpaces, tabSize: mode.tabSize });
+            this.applyMonacoDiffIndentOptions();
+            this.updateStatusBar();
+        });
+        indentGroup.append(indentSelect);
+        settingsBody.append(indentGroup);
+        const languageGroup = this.createPropGroup('Language');
+        const languageSelect = document.createElement('select');
+        languageSelect.classList.add('text_pole');
+        for (const lang of LANGUAGES) {
+            const option = document.createElement('option');
+            option.value = lang.id;
+            option.textContent = lang.label;
+            languageSelect.append(option);
+        }
+        languageSelect.value = this.currentLanguage.id;
+        languageSelect.addEventListener('change', () => {
+            this.setLanguage(LANGUAGES.find(item => item.id === languageSelect.value) ?? LANGUAGES[0]);
+        });
+        languageGroup.append(languageSelect);
+        settingsBody.append(languageGroup);
+        const syncGroup = this.createPropGroup('Diff Scroll Sync');
+        const syncSelect = document.createElement('select');
+        syncSelect.classList.add('text_pole');
+        for (const mode of SYNC_MODES) {
+            const option = document.createElement('option');
+            option.value = mode.id;
+            option.textContent = mode.label;
+            syncSelect.append(option);
+        }
+        syncSelect.value = this.scrollSyncMode.id;
+        syncSelect.addEventListener('change', () => {
+            this.setScrollSync(SYNC_MODES.find(item => item.id === syncSelect.value) ?? SYNC_MODES[1]);
+        });
+        syncGroup.append(syncSelect);
+        settingsBody.append(syncGroup);
         const limitGroup = this.createPropGroup('Limit Commits per Source');
         const limitInput = document.createElement('input');
         limitInput.type = 'number';
@@ -206,6 +339,11 @@ export class EveryTextLineEditor {
         limitInput.classList.add('text_pole');
         limitGroup.append(limitInput);
         settingsBody.append(limitGroup);
+        const storageGroup = this.createPropGroup('Storage');
+        const storageNote = document.createElement('small');
+        storageNote.textContent = 'History is stored in this browser with IndexedDB. SillyTavern saves are still handled by Apply.';
+        storageGroup.append(storageNote);
+        settingsBody.append(storageGroup);
         const exportGroup = this.createPropGroup('Export History');
         const exportBtn = this.makeTextButton('Save all as zip', 'fa-file-zipper', () => alert('Not implemented yet'));
         exportBtn.disabled = true;
@@ -266,8 +404,8 @@ export class EveryTextLineEditor {
         actionsRight.classList.add('etle--actions', 'etle--actions-right');
         header.append(actionsRight);
         this.dom.diff = this.makeTextButton('Diff', 'fa-code-compare', () => this.toggleDiff());
-        this.dom.revert = this.makeTextButton('Revert', 'fa-rotate-left', () => this.revert());
-        this.dom.apply = this.makeTextButton('Apply', 'fa-check', () => this.apply());
+        this.dom.revert = this.makeTextButton('', 'fa-rotate-left', () => this.revert());
+        this.dom.apply = this.makeTextButton('', 'fa-check', () => this.apply());
         actionsRight.append(this.dom.diff, this.dom.revert, this.dom.apply, this.makeIconButton('fa-xmark', 'Close editor', () => this.close().catch((error) => console.error(`[${NAME}] Failed to close editor`, error))));
         const workspace = document.createElement('div');
         this.dom.workspace = workspace;
@@ -281,6 +419,10 @@ export class EveryTextLineEditor {
         this.dom.editorHost = editorHost;
         editorHost.classList.add('etle--editorHost');
         workspace.append(editorHost);
+        const monacoDiffHost = document.createElement('div');
+        this.dom.monacoDiffHost = monacoDiffHost;
+        monacoDiffHost.classList.add('etle--monacoDiffHost');
+        workspace.append(monacoDiffHost);
         const masterScrollbar = document.createElement('div');
         this.dom.masterScrollbar = masterScrollbar;
         masterScrollbar.classList.add('etle--masterScrollbar');
@@ -302,10 +444,11 @@ export class EveryTextLineEditor {
                         return;
                     const sourcesInGroup = this.sources.filter(s => s.group === groupToCommit && !s.readonly && !s.placeholder);
                     const batchId = this.createHistoryBatchId();
+                    const scope = this.getHistoryScope(sourcesInGroup[0]);
                     await Promise.all(sourcesInGroup.map(async (source) => {
                         try {
                             const value = source.read();
-                            await this.historyStore.commit(source, value, 'manual', 'Initial Commit', batchId);
+                            await this.historyStore.commit(source, value, 'initial', 'Initial commit', batchId, this.getHistoryScope(source, scope));
                         }
                         catch (err) {
                             console.warn(`[ETLE] Failed to commit initial state for ${source.id}`, err);
@@ -318,7 +461,7 @@ export class EveryTextLineEditor {
                     await Promise.all(changedSources.map(async ({ source }) => {
                         try {
                             const value = source.read();
-                            await this.historyStore.commit(source, value, 'manual', message || undefined, batchId);
+                            await this.historyStore.commit(source, value, 'manual', message || undefined, batchId, this.getHistoryScope(source));
                         }
                         catch (err) {
                             console.warn(`[ETLE] Failed to commit ${source.id}`, err);
@@ -338,6 +481,9 @@ export class EveryTextLineEditor {
                 },
                 onSelectSource: async (sourceId) => {
                     await this.selectSource(sourceId, { force: true });
+                },
+                onCompareChanged: async (change) => {
+                    await this.compareChangedSource(change);
                 }
             });
         }
@@ -348,6 +494,35 @@ export class EveryTextLineEditor {
     }
     createHistoryBatchId() {
         return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    }
+    getHistoryScope(source, fallback) {
+        if (!source)
+            return fallback ?? { scopeId: 'global:global', scopeType: 'global', scopeLabel: 'global' };
+        const currentBranch = source.branchManager?.getCurrentBranch?.();
+        if (source.group.includes('Chat Completion') || source.group.includes('Utility') || source.group.includes('Formatting')) {
+            const label = currentBranch || 'Default';
+            return { scopeId: `openai-preset:${label}`, scopeType: 'openai-preset', scopeLabel: label };
+        }
+        if (source.group.includes('Instruct')) {
+            const label = currentBranch || 'Default';
+            return { scopeId: `instruct-template:${label}`, scopeType: 'instruct-template', scopeLabel: label };
+        }
+        if (source.group.includes('Context')) {
+            const label = currentBranch || 'Default';
+            return { scopeId: `context-template:${label}`, scopeType: 'context-template', scopeLabel: label };
+        }
+        if (source.group.includes('System Prompt')) {
+            const label = currentBranch || 'Default';
+            return { scopeId: `sysprompt:${label}`, scopeType: 'sysprompt', scopeLabel: label };
+        }
+        if (source.group.startsWith('World/Lorebook: ')) {
+            const label = source.group.replace('World/Lorebook: ', '');
+            return { scopeId: `world:${label}`, scopeType: 'world', scopeLabel: label };
+        }
+        if (source.group.includes('Persona')) {
+            return { scopeId: 'persona:active', scopeType: 'persona', scopeLabel: 'Active Persona' };
+        }
+        return fallback ?? { scopeId: 'global:global', scopeType: 'global', scopeLabel: 'global' };
     }
     setSidebarTab(tab) {
         this.selectedSidebarTab = tab;
@@ -435,6 +610,8 @@ export class EveryTextLineEditor {
             // Give ST a moment to update globals before refreshing
             setTimeout(async () => {
                 await this.refreshSources(true);
+                if (this.selectedSidebarTab === 'history')
+                    await this.refreshHistory();
             }, 100);
         });
         const branchWrapper = document.createElement('div');
@@ -479,6 +656,20 @@ export class EveryTextLineEditor {
         wrap.title = 'Toggle word wrap';
         wrap.addEventListener('click', () => this.setWordWrap(!JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true')));
         right.append(wrap);
+        const spell = document.createElement('button');
+        this.dom.statusSpellCheck = spell;
+        spell.type = 'button';
+        spell.classList.add('etle--statusButton');
+        spell.title = 'Toggle spell check';
+        spell.addEventListener('click', () => this.setSpellCheck(!isSpellCheckEnabled()));
+        right.append(spell);
+        const minimap = document.createElement('button');
+        this.dom.statusMinimap = minimap;
+        minimap.type = 'button';
+        minimap.classList.add('etle--statusButton');
+        minimap.title = 'Toggle Monaco minimap';
+        minimap.addEventListener('click', () => this.setMonacoMinimap(!isMonacoMinimapEnabled()));
+        right.append(minimap);
         const language = document.createElement('button');
         this.dom.statusLanguage = language;
         language.type = 'button';
@@ -486,6 +677,13 @@ export class EveryTextLineEditor {
         language.title = 'Cycle language';
         language.addEventListener('click', () => this.cycleLanguage());
         right.append(language);
+        const engine = document.createElement('button');
+        this.dom.statusEngine = engine;
+        engine.type = 'button';
+        engine.classList.add('etle--statusButton');
+        engine.title = 'Cycle editor engine';
+        engine.addEventListener('click', () => this.cycleEditorEngine().catch((error) => console.error(`[${NAME}] Failed to cycle editor engine`, error)));
+        right.append(engine);
         const sync = document.createElement('button');
         this.dom.statusScrollSync = sync;
         sync.type = 'button';
@@ -495,17 +693,75 @@ export class EveryTextLineEditor {
         right.append(sync);
         return status;
     }
+    async cycleEditorEngine() {
+        const index = EDITOR_ENGINES.findIndex(engine => engine.id === this.editorEngine.id);
+        await this.setEditorEngine(EDITOR_ENGINES[(index + 1) % EDITOR_ENGINES.length]);
+    }
+    async setEditorEngine(engine) {
+        if (engine.id === this.editorEngine.id)
+            return;
+        const previousEngine = this.editorEngine;
+        this.closeMonacoDiff({ syncValue: true });
+        const currentValue = this.editor?.value ?? '';
+        const currentScrollTop = this.editor?.scrollContainer?.scrollTop ?? 0;
+        const readOnly = !!this.selectedSource?.readonly;
+        try {
+            const nextEditor = await this.createEditorForEngine(this.dom.editorHost, engine, currentValue, readOnly);
+            this.editor?.dispose?.();
+            this.editor?.scrollContainer?.remove();
+            this.editor = nextEditor;
+            this.editor.scrollContainer.scrollTop = currentScrollTop;
+            this.editorEngine = engine;
+            localStorage.setItem(STORAGE.editorEngine, engine.id);
+            if (this.dom.editorEngine)
+                this.dom.editorEngine.value = engine.id;
+            this.bindDiffScrollSync();
+            this.updateDirty(this.selectedSource ? this.editor.value !== this.selectedSource.read() : false);
+            if (this.diffOpen && engine.id === 'monaco')
+                await this.openMonacoDiff();
+            else
+                this.renderDiff();
+            this.updateStatusBar();
+            requestAnimationFrame(() => this.editor?.update?.());
+        }
+        catch (error) {
+            this.editorEngine = previousEngine;
+            if (this.dom.editorEngine)
+                this.dom.editorEngine.value = previousEngine.id;
+            globalThis.toastr?.error?.('Monaco editor is not available. Staying on Prism.');
+            throw error;
+        }
+    }
+    async createEditorForEngine(host, engine, value = '', readOnly = false) {
+        if (engine.id === 'monaco') {
+            return this.createMonacoEditor(host, value, readOnly);
+        }
+        return this.createPrismCodeEditor(host, value, readOnly);
+    }
     createCodeEditor(host) {
+        this.editorReady = this.createEditorForEngine(host, this.editorEngine, '', false).then((editor) => {
+            this.editor = editor;
+            this.bindDiffScrollSync();
+        }).catch((error) => {
+            console.warn(`[${NAME}] Failed to initialize ${this.editorEngine.label}; falling back to Prism`, error);
+            this.editorEngine = EDITOR_ENGINES[0];
+            localStorage.setItem(STORAGE.editorEngine, this.editorEngine.id);
+            this.editor = this.createPrismCodeEditor(host, '', false);
+            this.bindDiffScrollSync();
+            this.updateStatusBar();
+        });
+    }
+    createPrismCodeEditor(host, value = '', readOnly = false) {
         languageMap.markdown = languageMap.md = {
             comments: {
                 block: ['<!--', '-->'],
             },
         };
-        this.editor = createEditor(host, {
-            value: '',
+        const editor = createEditor(host, {
+            value,
             language: 'markdown',
             lineNumbers: true,
-            readOnly: false,
+            readOnly,
             insertSpaces: this.indentMode.insertSpaces,
             tabSize: this.indentMode.tabSize,
             wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true'),
@@ -517,27 +773,137 @@ export class EveryTextLineEditor {
                 this.updateStatusBar();
             },
         }, searchWidget(), highlightBracketPairs(), matchBrackets(true), indentGuides(), defaultCommands());
-        this.editor.textarea.addEventListener('keydown', (event) => this.handleEditorKeyDown(event), { capture: true });
-        setSlashCommandAutoComplete(this.editor.textarea, true).then((autocomplete) => {
-            this.editor.textarea.addEventListener('keydown', (event) => autocomplete.handleKeyDown(event), { capture: true });
+        this.applySpellCheckToTextArea(editor.textarea);
+        editor.textarea.addEventListener('keydown', (event) => this.handleEditorKeyDown(event), { capture: true });
+        setSlashCommandAutoComplete(editor.textarea, true).then((autocomplete) => {
+            editor.textarea.addEventListener('keydown', (event) => autocomplete.handleKeyDown(event), { capture: true });
         }).catch(() => { });
         const syncCaret = () => {
             this.updateStatusBar();
             this.scheduleDiffScrollSync();
         };
-        this.editor.textarea.addEventListener('keydown', (event) => {
+        editor.textarea.addEventListener('keydown', (event) => {
             if (this.isCaretNavigationKey(event))
                 this.scheduleDiffScrollSync();
         });
-        this.editor.textarea.addEventListener('keyup', syncCaret);
-        this.editor.textarea.addEventListener('pointerup', syncCaret);
-        this.editor.textarea.addEventListener('click', syncCaret);
-        this.editor.textarea.addEventListener('select', syncCaret);
-        this.editor.textarea.addEventListener('input', syncCaret);
+        editor.textarea.addEventListener('keyup', syncCaret);
+        editor.textarea.addEventListener('pointerup', syncCaret);
+        editor.textarea.addEventListener('click', syncCaret);
+        editor.textarea.addEventListener('select', syncCaret);
+        editor.textarea.addEventListener('input', syncCaret);
         document.addEventListener('selectionchange', () => {
-            if (document.activeElement === this.editor?.textarea)
+            if (document.activeElement === editor.textarea)
                 syncCaret();
         });
+        return editor;
+    }
+    async createMonacoEditor(host, value = '', readOnly = false) {
+        const monaco = await loadMonaco();
+        const container = document.createElement('div');
+        container.classList.add('etle--monacoEditor');
+        host.append(container);
+        const focusProxy = document.createElement('textarea');
+        focusProxy.classList.add('etle--monacoFocusProxy');
+        focusProxy.tabIndex = -1;
+        this.applySpellCheckToTextArea(focusProxy);
+        container.append(focusProxy);
+        const model = monaco.editor.createModel(value, this.currentLanguage.id === 'yaml' ? 'yaml' : this.currentLanguage.id === 'markdown' ? 'markdown' : 'plaintext');
+        model.updateOptions({
+            tabSize: this.indentMode.tabSize,
+            insertSpaces: this.indentMode.insertSpaces,
+        });
+        const monacoEditor = monaco.editor.create(container, {
+            model,
+            readOnly,
+            automaticLayout: true,
+            minimap: { enabled: isMonacoMinimapEnabled() },
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
+            tabSize: this.indentMode.tabSize,
+            insertSpaces: this.indentMode.insertSpaces,
+            theme: 'vs-dark',
+        });
+        this.applySpellCheckToMonaco(container);
+        focusProxy.addEventListener('focus', () => monacoEditor.focus());
+        container.addEventListener('keydown', (event) => this.handleEditorKeyDown(event), { capture: true });
+        monacoEditor.onDidChangeModelContent(() => {
+            if (!this.selectedSource)
+                return;
+            this.updateDirty(model.getValue() !== this.selectedSource.read());
+            this.renderDiff();
+            this.updateStatusBar();
+        });
+        monacoEditor.onDidChangeCursorPosition(() => {
+            this.updateStatusBar();
+            this.scheduleDiffScrollSync();
+        });
+        monacoEditor.onDidChangeCursorSelection(() => {
+            this.updateStatusBar();
+            this.scheduleDiffScrollSync();
+        });
+        monacoEditor.onDidScrollChange(() => {
+            this.updateMasterScrollbarHeight();
+        });
+        const wrapper = {
+            get value() {
+                return model.getValue();
+            },
+            textarea: focusProxy,
+            scrollContainer: container,
+            wrapper: container,
+            setOptions: (options) => {
+                if (typeof options.value === 'string' && options.value !== model.getValue()) {
+                    model.setValue(options.value);
+                }
+                if (typeof options.readOnly === 'boolean') {
+                    monacoEditor.updateOptions({ readOnly: options.readOnly });
+                }
+                if (typeof options.wordWrap === 'boolean') {
+                    monacoEditor.updateOptions({ wordWrap: options.wordWrap ? 'on' : 'off' });
+                }
+                if (typeof options.minimap === 'boolean') {
+                    monacoEditor.updateOptions({ minimap: { enabled: options.minimap } });
+                }
+                if (typeof options.language === 'string') {
+                    monaco.editor.setModelLanguage(model, options.language === 'text' ? 'plaintext' : options.language);
+                }
+                if (typeof options.tabSize === 'number' || typeof options.insertSpaces === 'boolean') {
+                    model.updateOptions({
+                        tabSize: options.tabSize ?? this.indentMode.tabSize,
+                        insertSpaces: options.insertSpaces ?? this.indentMode.insertSpaces,
+                    });
+                    monacoEditor.updateOptions({
+                        tabSize: options.tabSize ?? this.indentMode.tabSize,
+                        insertSpaces: options.insertSpaces ?? this.indentMode.insertSpaces,
+                    });
+                }
+                if (typeof options.spellCheck === 'boolean') {
+                    this.applySpellCheckToTextArea(focusProxy);
+                    this.applySpellCheckToMonaco(container);
+                }
+            },
+            update: () => monacoEditor.layout(),
+            focus: () => monacoEditor.focus(),
+            getCursorPosition: () => {
+                const position = monacoEditor.getPosition();
+                return {
+                    line: position?.lineNumber ?? 1,
+                    column: position?.column ?? 1,
+                };
+            },
+            getSelectionLength: () => {
+                const selection = monacoEditor.getSelection();
+                if (!selection || selection.isEmpty())
+                    return 0;
+                return model.getValueInRange(selection).length;
+            },
+            dispose: () => {
+                monacoEditor.dispose();
+                model.dispose();
+            },
+        };
+        return wrapper;
     }
     handleEditorKeyDown(event) {
         const isSave = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's';
@@ -709,6 +1075,14 @@ export class EveryTextLineEditor {
                 this.renderTree();
             });
             section.append(header);
+            const branchName = sources.find(source => source.branchManager)?.branchManager?.getCurrentBranch?.();
+            if (branchName) {
+                const branchLine = document.createElement('div');
+                branchLine.classList.add('etle--groupBranch');
+                branchLine.textContent = branchName;
+                branchLine.title = branchName;
+                section.append(branchLine);
+            }
             const list = document.createElement('div');
             list.classList.add('etle--sourceList');
             for (const source of sources) {
@@ -786,9 +1160,11 @@ export class EveryTextLineEditor {
         if (!source || source.selectable === false)
             return;
         this.selectedSource = source;
+        if (this.historyCommit?.sourceId !== source.id)
+            this.historyCommit = undefined;
         localStorage.setItem(STORAGE.selectedSource, source.id);
         this.updateHeader();
-        this.editor.setOptions({ readOnly: !!source.readonly });
+        this.editor?.setOptions({ readOnly: !!source.readonly });
         this.setEditorValue(source.read());
         this.updateDirty(false);
         this.renderDiff();
@@ -798,7 +1174,11 @@ export class EveryTextLineEditor {
             this.refreshHistory();
     }
     async confirmUnsavedSourceChange(action = 'switch') {
-        const actionText = action === 'close' ? 'closing the editor' : 'switching sources';
+        const actionText = action === 'close'
+            ? 'closing the editor'
+            : action === 'load'
+                ? 'loading this version'
+                : 'switching sources';
         const result = await Popup.show.confirm('Unsaved changes', `Save changes before ${actionText}?`, {
             okButton: 'Save Changes',
             cancelButton: 'Cancel',
@@ -817,15 +1197,51 @@ export class EveryTextLineEditor {
         return 'cancel';
     }
     setEditorValue(value) {
-        this.editor.setOptions({ value: String(value ?? '') });
+        this.editor?.setOptions({ value: String(value ?? '') });
+        if (this.monacoDiffModifiedModel && this.monacoDiffModifiedModel.getValue() !== String(value ?? '')) {
+            this.monacoDiffModifiedModel.setValue(String(value ?? ''));
+        }
         this.renderDiff();
         this.updateStatusBar();
     }
     setWordWrap(enabled) {
         localStorage.setItem(STORAGE.wordWrap, JSON.stringify(enabled));
-        this.editor.setOptions({ wordWrap: enabled });
+        this.editor?.setOptions({ wordWrap: enabled });
         this.oldEditor?.setOptions({ wordWrap: enabled });
         this.updateStatusBar();
+    }
+    setSpellCheck(enabled) {
+        localStorage.setItem(STORAGE.spellCheck, JSON.stringify(enabled));
+        this.applySpellCheckToTextArea(this.editor?.textarea);
+        this.applySpellCheckToTextArea(this.oldEditor?.textarea);
+        this.applySpellCheckToMonaco(this.editor?.scrollContainer);
+        this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
+        this.editor?.setOptions({ spellCheck: enabled });
+        this.updateStatusBar();
+    }
+    setMonacoMinimap(enabled) {
+        localStorage.setItem(STORAGE.monacoMinimap, JSON.stringify(enabled));
+        this.editor?.setOptions({ minimap: enabled });
+        this.monacoDiffEditor?.updateOptions?.({ minimap: { enabled } });
+        this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.({ minimap: { enabled } });
+        this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.({ minimap: { enabled } });
+        this.updateStatusBar();
+        requestAnimationFrame(() => {
+            this.editor?.update?.();
+            this.layoutMonacoDiff();
+        });
+    }
+    applySpellCheckToTextArea(textarea) {
+        if (!textarea)
+            return;
+        const enabled = isSpellCheckEnabled();
+        textarea.spellcheck = enabled;
+        textarea.setAttribute('spellcheck', String(enabled));
+    }
+    applySpellCheckToMonaco(root) {
+        if (!root)
+            return;
+        root.querySelectorAll('textarea').forEach(textarea => this.applySpellCheckToTextArea(textarea));
     }
     cycleIndentMode() {
         const index = INDENT_MODES.findIndex(mode => mode.id === this.indentMode.id);
@@ -839,6 +1255,7 @@ export class EveryTextLineEditor {
             insertSpaces: this.indentMode.insertSpaces,
             tabSize: this.indentMode.tabSize,
         });
+        this.applyMonacoDiffIndentOptions();
         this.updateStatusBar();
     }
     cycleLanguage() {
@@ -850,6 +1267,7 @@ export class EveryTextLineEditor {
         this.currentLanguage = lang;
         this.editor?.setOptions({ language: lang.id });
         this.oldEditor?.setOptions({ language: lang.id });
+        this.setMonacoDiffLanguage();
         this.updateStatusBar();
     }
     cycleScrollSync() {
@@ -865,6 +1283,16 @@ export class EveryTextLineEditor {
             this.syncDiffScroll();
     }
     getCursorPosition() {
+        const modifiedEditor = this.monacoDiffEditor?.getModifiedEditor?.();
+        if (modifiedEditor) {
+            const position = modifiedEditor.getPosition();
+            return {
+                line: position?.lineNumber ?? 1,
+                column: position?.column ?? 1,
+            };
+        }
+        if (this.editor?.getCursorPosition)
+            return this.editor.getCursorPosition();
         const value = this.editor?.value ?? '';
         const position = this.editor?.textarea?.selectionStart ?? 0;
         const before = value.slice(0, position);
@@ -875,13 +1303,18 @@ export class EveryTextLineEditor {
         };
     }
     getEditorStats() {
-        const value = this.editor?.value ?? '';
+        const value = this.getCurrentEditorValue();
+        const modifiedEditor = this.monacoDiffEditor?.getModifiedEditor?.();
+        const selection = modifiedEditor?.getSelection?.();
+        const adapterSelection = selection && !selection.isEmpty()
+            ? this.monacoDiffModifiedModel?.getValueInRange(selection).length
+            : this.editor?.getSelectionLength?.();
         const selectionStart = this.editor?.textarea?.selectionStart ?? 0;
         const selectionEnd = this.editor?.textarea?.selectionEnd ?? selectionStart;
         return {
             chars: value.length,
             lines: value.length ? value.split('\n').length : 1,
-            selection: Math.abs(selectionEnd - selectionStart),
+            selection: adapterSelection ?? Math.abs(selectionEnd - selectionStart),
         };
     }
     updateHeader() {
@@ -1039,6 +1472,8 @@ export class EveryTextLineEditor {
     }
     updateStatusBar() {
         const wrapEnabled = JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true');
+        const spellCheckEnabled = isSpellCheckEnabled();
+        const minimapEnabled = isMonacoMinimapEnabled();
         const stats = this.getEditorStats();
         if (this.dom.statusBranch) {
             const branchManager = this.selectedSource?.branchManager;
@@ -1092,8 +1527,24 @@ export class EveryTextLineEditor {
             this.dom.statusWrap.textContent = wrapEnabled ? 'Wrap: On' : 'Wrap: Off';
             this.dom.statusWrap.classList.toggle('etle--statusActive', wrapEnabled);
         }
+        if (this.dom.statusSpellCheck) {
+            this.dom.statusSpellCheck.textContent = spellCheckEnabled ? 'Spell: On' : 'Spell: Off';
+            this.dom.statusSpellCheck.classList.toggle('etle--statusActive', spellCheckEnabled);
+        }
+        if (this.dom.statusMinimap) {
+            this.dom.statusMinimap.hidden = this.editorEngine.id !== 'monaco';
+            this.dom.statusMinimap.textContent = minimapEnabled ? 'Map: On' : 'Map: Off';
+            this.dom.statusMinimap.classList.toggle('etle--statusActive', minimapEnabled);
+        }
         if (this.dom.statusLanguage) {
             this.dom.statusLanguage.textContent = this.currentLanguage.label;
+        }
+        if (this.dom.statusEngine) {
+            this.dom.statusEngine.textContent = this.editorEngine.label;
+            this.dom.statusEngine.classList.toggle('etle--statusActive', this.editorEngine.id !== 'prism');
+        }
+        if (this.dom.editorEngine) {
+            this.dom.editorEngine.value = this.editorEngine.id;
         }
         if (this.dom.statusScrollSync) {
             this.dom.statusScrollSync.hidden = !this.diffOpen;
@@ -1101,6 +1552,9 @@ export class EveryTextLineEditor {
             this.dom.statusScrollSync.classList.toggle('etle--statusActive', this.scrollSyncMode.id !== 'off');
         }
         this.dom.root?.classList.toggle('etle--syncOff', this.scrollSyncMode.id === 'off');
+        this.dom.settingsPanel?.querySelector('[data-setting="wrap"]')?.classList.toggle('etle--activeButton', wrapEnabled);
+        this.dom.settingsPanel?.querySelector('[data-setting="spell"]')?.classList.toggle('etle--activeButton', spellCheckEnabled);
+        this.dom.settingsPanel?.querySelector('[data-setting="minimap"]')?.classList.toggle('etle--activeButton', minimapEnabled);
     }
     async apply() {
         await this.saveCurrentSource({ refresh: true, toast: true });
@@ -1108,7 +1562,7 @@ export class EveryTextLineEditor {
     async saveCurrentSource({ refresh = true, toast = true } = {}) {
         if (!this.selectedSource || this.selectedSource.readonly)
             return;
-        const value = this.editor.value;
+        const value = this.getCurrentEditorValue();
         try {
             this.selectedSource.write(value);
             await this.selectedSource.save?.();
@@ -1138,9 +1592,24 @@ export class EveryTextLineEditor {
         this.diffOpen = !this.diffOpen;
         this.dom.root.classList.toggle('etle--showDiff', this.diffOpen);
         this.dom.diff.classList.toggle('etle--activeButton', this.diffOpen);
-        this.renderDiff();
-        this.editor.update();
-        this.oldEditor?.update();
+        if (this.diffOpen && this.editorEngine.id === 'monaco') {
+            this.dom.root.classList.add('etle--monacoDiffMode');
+            this.openMonacoDiff().catch((error) => {
+                console.error(`[${NAME}] Failed to open Monaco diff`, error);
+                globalThis.toastr?.error?.('Failed to open Monaco diff. Falling back to Prism diff.');
+                this.dom.root.classList.remove('etle--monacoDiffMode');
+                this.renderDiff();
+            });
+        }
+        else if (!this.diffOpen) {
+            this.closeMonacoDiff({ syncValue: true });
+            this.renderDiff();
+        }
+        else {
+            this.renderDiff();
+        }
+        this.editor?.update?.();
+        this.oldEditor?.update?.();
         if (this.diffOpen) {
             requestAnimationFrame(() => this.updateMasterScrollbarHeight());
         }
@@ -1149,6 +1618,10 @@ export class EveryTextLineEditor {
     updateMasterScrollbarHeight() {
         if (!this.dom.masterScrollContent || !this.editor || !this.oldEditor)
             return;
+        if (this.dom.root?.classList.contains('etle--monacoDiffMode')) {
+            this.dom.masterScrollContent.style.height = '1px';
+            return;
+        }
         const height = Math.max(this.editor.scrollContainer.scrollHeight, this.oldEditor.scrollContainer.scrollHeight);
         this.dom.masterScrollContent.style.height = `${height}px`;
         this.dom.masterScrollbar.scrollTop = this.editor.scrollContainer.scrollTop;
@@ -1156,11 +1629,20 @@ export class EveryTextLineEditor {
     renderDiff() {
         if (!this.oldEditor)
             return;
-        const saved = this.selectedSource ? this.selectedSource.read() : '';
-        const unsaved = this.editor?.value ?? '';
+        if (this.diffOpen && this.editorEngine.id === 'monaco') {
+            this.updateMonacoDiffModels();
+            return;
+        }
+        const saved = this.getDiffOriginalValue();
+        const unsaved = this.getCurrentEditorValue();
         const diff = getLineDiff(saved, unsaved);
         this.oldEditor.setOptions({ value: diff.oldDisplayText });
         requestAnimationFrame(() => this.highlightDiff(diff));
+    }
+    getDiffOriginalValue() {
+        if (this.historyCommit?.sourceId === this.selectedSource?.id)
+            return this.historyCommit.content;
+        return this.selectedSource ? this.selectedSource.read() : '';
     }
     highlightDiff(diff) {
         this.applyDiffMarks(this.oldEditor, diff.oldMarks, 'removed');
@@ -1183,6 +1665,124 @@ export class EveryTextLineEditor {
             }
         });
     }
+    getCurrentEditorValue() {
+        return this.monacoDiffModifiedModel?.getValue?.() ?? this.editor?.value ?? '';
+    }
+    getMonacoLanguageId() {
+        if (this.currentLanguage.id === 'text')
+            return 'plaintext';
+        return this.currentLanguage.id;
+    }
+    async openMonacoDiff() {
+        if (!this.dom.monacoDiffHost || !this.selectedSource)
+            return;
+        this.dom.root?.classList.add('etle--monacoDiffMode');
+        this.disposeMonacoDiff({ syncValue: false, clearHost: true });
+        const monaco = await loadMonaco();
+        this.dom.root?.classList.add('etle--monacoDiffMode');
+        this.dom.monacoDiffHost.innerHTML = '';
+        const originalValue = this.getDiffOriginalValue();
+        const modifiedValue = this.editor?.value ?? '';
+        const language = this.getMonacoLanguageId();
+        this.monacoDiffOriginalModel = monaco.editor.createModel(originalValue, language);
+        this.monacoDiffModifiedModel = monaco.editor.createModel(modifiedValue, language);
+        this.monacoDiffOriginalModel.updateOptions({
+            tabSize: this.indentMode.tabSize,
+            insertSpaces: this.indentMode.insertSpaces,
+        });
+        this.monacoDiffModifiedModel.updateOptions({
+            tabSize: this.indentMode.tabSize,
+            insertSpaces: this.indentMode.insertSpaces,
+        });
+        this.monacoDiffEditor = monaco.editor.createDiffEditor(this.dom.monacoDiffHost, {
+            automaticLayout: true,
+            originalEditable: false,
+            readOnly: !!this.selectedSource.readonly,
+            renderSideBySide: true,
+            minimap: { enabled: isMonacoMinimapEnabled() },
+            scrollBeyondLastLine: false,
+            wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
+            tabSize: this.indentMode.tabSize,
+            insertSpaces: this.indentMode.insertSpaces,
+        });
+        this.monacoDiffEditor.setModel({
+            original: this.monacoDiffOriginalModel,
+            modified: this.monacoDiffModifiedModel,
+        });
+        this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
+        const modifiedEditor = this.monacoDiffEditor.getModifiedEditor();
+        modifiedEditor.onDidChangeModelContent(() => {
+            const value = this.monacoDiffModifiedModel.getValue();
+            this.editor?.setOptions({ value });
+            this.updateDirty(value !== this.selectedSource?.read());
+            this.updateStatusBar();
+        });
+        modifiedEditor.onDidChangeCursorPosition(() => this.updateStatusBar());
+        modifiedEditor.onDidChangeCursorSelection(() => this.updateStatusBar());
+        this.layoutMonacoDiff();
+        requestAnimationFrame(() => this.layoutMonacoDiff(true));
+    }
+    updateMonacoDiffModels() {
+        if (!this.monacoDiffEditor || !this.selectedSource)
+            return;
+        const originalValue = this.getDiffOriginalValue();
+        const modifiedValue = this.editor?.value ?? '';
+        if (this.monacoDiffOriginalModel?.getValue() !== originalValue) {
+            this.monacoDiffOriginalModel.setValue(originalValue);
+        }
+        if (this.monacoDiffModifiedModel?.getValue() !== modifiedValue) {
+            this.monacoDiffModifiedModel.setValue(modifiedValue);
+        }
+    }
+    setMonacoDiffLanguage() {
+        const monaco = globalThis.monaco;
+        if (!monaco?.editor)
+            return;
+        const language = this.getMonacoLanguageId();
+        if (this.monacoDiffOriginalModel)
+            monaco.editor.setModelLanguage(this.monacoDiffOriginalModel, language);
+        if (this.monacoDiffModifiedModel)
+            monaco.editor.setModelLanguage(this.monacoDiffModifiedModel, language);
+    }
+    applyMonacoDiffIndentOptions() {
+        const options = {
+            tabSize: this.indentMode.tabSize,
+            insertSpaces: this.indentMode.insertSpaces,
+        };
+        this.monacoDiffOriginalModel?.updateOptions?.(options);
+        this.monacoDiffModifiedModel?.updateOptions?.(options);
+        this.monacoDiffEditor?.updateOptions?.(options);
+        this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.(options);
+        this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.(options);
+    }
+    closeMonacoDiff({ syncValue = true } = {}) {
+        this.disposeMonacoDiff({ syncValue, clearHost: true });
+        this.dom.root?.classList.remove('etle--monacoDiffMode');
+    }
+    disposeMonacoDiff({ syncValue = true, clearHost = false } = {}) {
+        if (syncValue && this.monacoDiffModifiedModel) {
+            this.editor?.setOptions({ value: this.monacoDiffModifiedModel.getValue() });
+        }
+        this.monacoDiffEditor?.dispose?.();
+        this.monacoDiffOriginalModel?.dispose?.();
+        this.monacoDiffModifiedModel?.dispose?.();
+        this.monacoDiffEditor = null;
+        this.monacoDiffOriginalModel = null;
+        this.monacoDiffModifiedModel = null;
+        if (clearHost && this.dom.monacoDiffHost)
+            this.dom.monacoDiffHost.innerHTML = '';
+    }
+    layoutMonacoDiff(focus = false) {
+        if (!this.monacoDiffEditor || !this.dom.monacoDiffHost)
+            return;
+        const rect = this.dom.monacoDiffHost.getBoundingClientRect();
+        this.monacoDiffEditor.layout({
+            width: Math.max(1, Math.floor(rect.width)),
+            height: Math.max(1, Math.floor(rect.height)),
+        });
+        if (focus)
+            this.monacoDiffEditor.getModifiedEditor?.()?.focus?.();
+    }
     updateDirty(isDirty) {
         this.dirty = !!isDirty;
         this.dom.root?.classList.toggle('etle--dirty', this.dirty);
@@ -1202,8 +1802,9 @@ export class EveryTextLineEditor {
         if (!this.dom.root.classList.contains('openDrawer')) {
             this.dom.toggle.click();
         }
-        this.editor.update();
-        this.editor.textarea.focus();
+        this.editor?.update?.();
+        this.editor?.focus?.();
+        this.editor?.textarea?.focus();
     }
     async close() {
         if (this.dirty) {
@@ -1249,12 +1850,13 @@ export class EveryTextLineEditor {
         }
         const allGroups = Array.from(new Set(this.sources.map(s => s.group))).sort();
         const groupSources = this.sources.filter(s => s.group === activeGroup);
+        const scope = this.getHistoryScope(groupSources[0] ?? this.selectedSource ?? undefined);
         // 1. Detect Changes
         const changedSources = [];
         await Promise.all(groupSources.map(async (source) => {
             if (source.readonly || source.placeholder)
                 return;
-            const latest = await this.historyStore.getLatestSource(source.id);
+            const latest = await this.historyStore.getLatestSource(source.id, this.getHistoryScope(source, scope).scopeId);
             const currentValue = source.read();
             const hash = await this.historyStore.hashContent(currentValue);
             if (!latest) {
@@ -1262,28 +1864,80 @@ export class EveryTextLineEditor {
                 changedSources.push({ source, status: 'A' });
             }
             else if (latest.latestHash !== hash) {
-                changedSources.push({ source, status: 'M' });
+                const commit = latest.latestCommitId ? await this.historyStore.getCommit(latest.latestCommitId) : null;
+                changedSources.push({ source, status: 'M', latest: commit });
             }
         }));
-        // 2. Fetch Commits for all sources in group
-        const commitPromises = groupSources.map(s => this.historyStore.listCommits(s.id, 50));
-        const allCommitsArrays = await Promise.all(commitPromises);
-        const flattenedCommits = allCommitsArrays.flat().sort((a, b) => b.createdAt - a.createdAt);
-        // Take latest 100 group-wide commits
-        const finalCommits = flattenedCommits.slice(0, 100);
+        const finalCommits = await this.historyStore.listCommitsByScope(scope.scopeId, 200);
         this.historyPanel.render(activeGroup, allGroups, this.sources, finalCommits, changedSources);
     }
     async diffHistoryCommit(commit) {
+        const source = this.sources.find(item => item.id === commit.sourceId);
+        if (!source) {
+            globalThis.toastr?.warning?.('This historical source is not available in the current SillyTavern state.');
+            return;
+        }
+        if (source && this.selectedSource?.id !== source.id) {
+            await this.selectSource(source.id);
+            if (this.selectedSource?.id !== source.id)
+                return;
+        }
         this.historyCommit = commit;
-        this.oldEditor.value = commit.content;
+        if (!this.diffOpen)
+            this.toggleDiff();
+        this.renderDiff();
+    }
+    async compareChangedSource(change) {
+        if (this.selectedSource?.id !== change.source.id) {
+            await this.selectSource(change.source.id);
+            if (this.selectedSource?.id !== change.source.id)
+                return;
+        }
+        if (change.latest) {
+            this.historyCommit = change.latest;
+        }
+        else {
+            this.historyCommit = {
+                id: 'empty',
+                sourceId: change.source.id,
+                sourceLabel: change.source.label,
+                sourceGroup: change.source.group,
+                ...this.getHistoryScope(change.source),
+                createdAt: Date.now(),
+                parentId: null,
+                reason: 'initial',
+                content: '',
+                hash: '',
+            };
+        }
         if (!this.diffOpen)
             this.toggleDiff();
         this.renderDiff();
     }
     async loadHistoryCommit(commit) {
-        if (this.dirty && !confirm('You have unsaved changes. Discard them and load this version?'))
+        const source = this.sources.find(item => item.id === commit.sourceId);
+        if (!source) {
+            globalThis.toastr?.warning?.('This historical source is not available in the current SillyTavern state.');
             return;
-        this.editor.value = commit.content;
+        }
+        if (this.dirty) {
+            const choice = await this.confirmUnsavedSourceChange('load');
+            if (choice === 'cancel')
+                return;
+            if (choice === 'save') {
+                const saved = await this.saveCurrentSource({ refresh: false, toast: true });
+                if (!saved)
+                    return;
+            }
+            if (choice === 'discard')
+                this.updateDirty(false);
+        }
+        if (this.selectedSource?.id !== commit.sourceId) {
+            await this.selectSource(commit.sourceId, { force: true });
+            if (this.selectedSource?.id !== commit.sourceId)
+                return;
+        }
+        this.setEditorValue(commit.content);
         this.historyCommit = commit;
         this.updateDirty(true);
     }

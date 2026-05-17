@@ -2,15 +2,18 @@ export declare const NAME: string;
 export declare const STORAGE: {
     selectedSource: string;
     wordWrap: string;
+    spellCheck: string;
+    monacoMinimap: string;
     panelWidth: string;
     sidebarCollapsed: string;
     collapsedGroups: string;
     indentMode: string;
     scrollSync: string;
+    editorEngine: string;
 };
 export declare const DB: {
     readonly NAME: `${string}:history`;
-    readonly VERSION: 1;
+    readonly VERSION: 2;
 };
 export declare const INDENT_MODES: readonly [{
     readonly id: "tabs";
@@ -47,6 +50,13 @@ export declare const SYNC_MODES: readonly [{
 }, {
     readonly id: "ratio";
     readonly label: "Sync: Ratio";
+}];
+export declare const EDITOR_ENGINES: readonly [{
+    readonly id: "prism";
+    readonly label: "Prism";
+}, {
+    readonly id: "monaco";
+    readonly label: "Monaco";
 }];
 export declare const GENERATION_TRIGGERS: readonly [{
     readonly id: "normal";

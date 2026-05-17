@@ -1,11 +1,15 @@
-import { HistoryCommit, HistorySource, TextSource } from './types.js';
+import { HistoryCommit, HistoryScope, HistorySource, TextSource } from './types.js';
 export declare class HistoryStore {
     private db;
     open(): Promise<void>;
-    commit(source: TextSource, content: string, reason: HistoryCommit['reason'], message?: string, batchId?: string): Promise<HistoryCommit | null>;
-    listCommits(sourceId: string, limit?: number): Promise<HistoryCommit[]>;
+    commit(source: TextSource, content: string, reason: HistoryCommit['reason'], message: string | undefined, batchId: string, scope: HistoryScope): Promise<HistoryCommit | null>;
+    listCommits(sourceId: string, scopeId: string, limit?: number): Promise<HistoryCommit[]>;
+    listCommitsByScope(scopeId: string, limit?: number): Promise<HistoryCommit[]>;
     getCommit(id: string): Promise<HistoryCommit | null>;
-    pruneSource(sourceId: string, keepCount: number): Promise<number>;
-    getLatestSource(sourceId: string): Promise<HistorySource | null>;
+    pruneSource(sourceId: string, scopeId: string, keepCount: number): Promise<number>;
+    getLatestSource(sourceId: string, scopeId: string): Promise<HistorySource | null>;
     hashContent(content: string): Promise<string>;
+    private getSourceKey;
+    private createCommitIndexes;
+    private ensureCommitIndexes;
 }

@@ -5,16 +5,19 @@ export const NAME = ['dist', 'src'].includes(EXTENSION_FOLDER) ? EXTENSION_PATH_
 export const STORAGE = {
     selectedSource: `${NAME}:selectedSource`,
     wordWrap: `${NAME}:wordWrap`,
+    spellCheck: `${NAME}:spellCheck`,
+    monacoMinimap: `${NAME}:monacoMinimap`,
     panelWidth: `${NAME}:panelWidth`,
     sidebarCollapsed: `${NAME}:sidebarCollapsed`,
     collapsedGroups: `${NAME}:collapsedGroups`,
     indentMode: `${NAME}:indentMode`,
     scrollSync: `${NAME}:scrollSync`,
+    editorEngine: `${NAME}:editorEngine`,
 };
 
 export const DB = {
     NAME: `${NAME}:history`,
-    VERSION: 1,
+    VERSION: 2,
 } as const;
 
 export const INDENT_MODES = [
@@ -33,6 +36,11 @@ export const SYNC_MODES = [
     { id: 'off', label: 'Sync: Off' },
     { id: 'line', label: 'Sync: Line' },
     { id: 'ratio', label: 'Sync: Ratio' },
+] as const;
+
+export const EDITOR_ENGINES = [
+    { id: 'prism', label: 'Prism' },
+    { id: 'monaco', label: 'Monaco' },
 ] as const;
 
 export const GENERATION_TRIGGERS = [

@@ -5,6 +5,10 @@ import { power_user, context_presets } from '../../../../power-user.js';
 // @ts-ignore
 import { selectContextPreset, selectInstructPreset, instruct_presets } from '../../../../instruct-mode.js';
 // @ts-ignore
+import { system_prompts } from '../../../../sysprompt.js';
+// @ts-ignore
+import { getPresetManager } from '../../../../preset-manager.js';
+// @ts-ignore
 import { loadWorldInfo, reloadEditor, saveWorldInfo, world_names } from '../../../../world-info.js';
 // @ts-ignore
 import { saveSettingsDebounced } from '../../../../../script.js';
@@ -175,9 +179,91 @@ const makeObjectFieldSource = ({ id, label, group, object, property, selector = 
     };
 };
 
+const getSystemPromptFieldSelector = (property: string): string | null => {
+    switch (property) {
+        case 'content':
+            return '#sysprompt_content';
+        case 'post_history':
+            return '#sysprompt_post_history';
+        default:
+            return null;
+    }
+};
+
+const saveInstructPreset = async () => {
+    saveSettingsDebounced();
+
+    const name = power_user?.instruct?.preset;
+    const presetManager = getPresetManager?.('instruct');
+    if (!name || !presetManager?.savePreset) return;
+
+    await presetManager.savePreset(name, {
+        ...power_user.instruct,
+        name,
+    }, { skipUpdate: true });
+};
+
+const makeInstructFieldSource = (property: string, label: string): TextSource => {
+    const branchManager = getBranchManager('Power User Instruct');
+    const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
+    return {
+        id: `power_user.instruct:${property}${branchSuffix}`,
+        label,
+        group: 'Power User Instruct',
+        groupOrder: GROUP_ORDER['Power User Instruct'],
+        readonly: false,
+        branchManager,
+        read: () => String(power_user?.instruct?.[property] ?? ''),
+        write: (value) => {
+            power_user.instruct[property] = value;
+            savePowerUserField(`#instruct_${property}`, value);
+        },
+        save: saveInstructPreset,
+        meta: power_user?.instruct?.preset ? `Instruct template: ${power_user.instruct.preset}` : 'Instruct template',
+    };
+};
+
+const saveSystemPromptPreset = async () => {
+    saveSettingsDebounced();
+
+    const name = power_user?.sysprompt?.name;
+    const presetManager = getPresetManager?.('sysprompt');
+    if (!name || !presetManager?.savePreset) return;
+
+    await presetManager.savePreset(name, {
+        ...power_user.sysprompt,
+        name,
+    }, { skipUpdate: true });
+};
+
+const makeSystemPromptFieldSource = (property: string, label: string): TextSource => {
+    const branchManager = getBranchManager('System Prompt');
+    const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+    const selector = getSystemPromptFieldSelector(property);
+
+    return {
+        id: `power_user.sysprompt:${property}${branchSuffix}`,
+        label,
+        group: 'System Prompt',
+        groupOrder: GROUP_ORDER['System Prompt'],
+        readonly: false,
+        branchManager,
+        read: () => String(power_user?.sysprompt?.[property] ?? ''),
+        write: (value) => {
+            power_user.sysprompt[property] = value;
+            if (selector) savePowerUserField(selector, value);
+        },
+        save: saveSystemPromptPreset,
+        meta: power_user?.sysprompt?.name ? `System prompt preset: ${power_user.sysprompt.name}` : 'System prompt preset',
+    };
+};
+
 const getBranchManager = (group: string): BranchManager | undefined => {
     switch (group) {
         case 'Chat Completion Prompts':
+        case 'Utility Prompts':
+        case 'Formatting Prompts':
             return {
                 getBranches: () => Object.keys(openai_setting_names || {}),
                 getCurrentBranch: () => oai_settings?.preset_settings_openai ?? 'Default',
@@ -207,6 +293,27 @@ const getBranchManager = (group: string): BranchManager | undefined => {
                 getCurrentBranch: () => power_user?.instruct?.preset ?? 'Default',
                 switchBranch: async (branchName) => {
                     selectInstructPreset?.(branchName, { isAuto: true });
+                }
+            };
+        case 'System Prompt':
+            return {
+                getBranches: () => (system_prompts || []).map(preset => preset.name).filter(Boolean),
+                getCurrentBranch: () => power_user?.sysprompt?.name ?? 'Default',
+                switchBranch: async (branchName) => {
+                    const select = document.querySelector<HTMLSelectElement>('#sysprompt_select');
+                    if (select) {
+                        select.value = branchName;
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                        return;
+                    }
+
+                    const prompt = (system_prompts || []).find(preset => preset.name === branchName);
+                    if (!prompt || !power_user?.sysprompt) return;
+
+                    power_user.sysprompt.name = prompt.name;
+                    power_user.sysprompt.content = prompt.content || '';
+                    power_user.sysprompt.post_history = prompt.post_history || '';
+                    saveSettingsDebounced();
                 }
             };
         default:
@@ -404,27 +511,13 @@ export const getSources = async (): Promise<TextSource[]> => {
 
     if (power_user?.instruct) {
         for (const [property, label] of TEXT_FIELDS.instruct) {
-            sources.push(makeObjectFieldSource({
-                id: `power_user.instruct:${property}`,
-                label,
-                group: 'Power User Instruct',
-                object: power_user.instruct,
-                property,
-                selector: `#instruct_${property}`,
-            }));
+            sources.push(makeInstructFieldSource(property, label));
         }
     }
 
     if (power_user?.sysprompt) {
         for (const [property, label] of TEXT_FIELDS.sysprompt) {
-            sources.push(makeObjectFieldSource({
-                id: `power_user.sysprompt:${property}`,
-                label,
-                group: 'System Prompt',
-                object: power_user.sysprompt,
-                property,
-                selector: property === 'content' ? '#sysprompt_content' : null,
-            }));
+            sources.push(makeSystemPromptFieldSource(property, label));
         }
     }
 

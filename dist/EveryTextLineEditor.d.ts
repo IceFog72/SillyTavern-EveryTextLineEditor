@@ -1,11 +1,13 @@
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
-import { DomRefs, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
+import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
 declare global {
     interface Window {
         EveryTextLineEditor?: EveryTextLineEditor;
+        monaco?: any;
+        require?: any;
     }
 }
 export declare class EveryTextLineEditor {
@@ -15,9 +17,14 @@ export declare class EveryTextLineEditor {
     collapsedGroups: Set<string>;
     currentLanguage: Language;
     scrollSyncMode: SyncMode;
+    editorEngine: EditorEngine;
     dom: DomRefs;
     editor: PrismEditorLike | null;
     oldEditor: PrismEditorLike | null;
+    editorReady: Promise<void>;
+    monacoDiffEditor: any;
+    monacoDiffOriginalModel: any;
+    monacoDiffModifiedModel: any;
     diffOpen: boolean;
     isSyncingScroll: boolean;
     scrollSyncFrame: number;
@@ -39,6 +46,7 @@ export declare class EveryTextLineEditor {
     handleDocumentClick(event: any): void;
     renderPanel(): HTMLDivElement;
     createHistoryBatchId(): string;
+    getHistoryScope(source?: TextSource, fallback?: HistoryScope): HistoryScope;
     setSidebarTab(tab: SidebarTab): void;
     setSidebarCollapsed(collapsed: boolean): void;
     toggleDrawerClasses(): void;
@@ -46,7 +54,12 @@ export declare class EveryTextLineEditor {
     makeIconButton(icon: any, title: any, onClick: any): HTMLButtonElement;
     makeTextButton(text: any, icon: any, onClick: any): HTMLButtonElement;
     renderStatusBar(): HTMLElement;
+    cycleEditorEngine(): Promise<void>;
+    setEditorEngine(engine: EditorEngine): Promise<void>;
+    createEditorForEngine(host: any, engine: EditorEngine, value?: string, readOnly?: boolean): Promise<PrismEditorLike>;
     createCodeEditor(host: any): void;
+    createPrismCodeEditor(host: any, value?: string, readOnly?: boolean): PrismEditorLike;
+    createMonacoEditor(host: any, value?: string, readOnly?: boolean): Promise<PrismEditorLike>;
     handleEditorKeyDown(event: KeyboardEvent): void;
     isCaretNavigationKey(event: KeyboardEvent): boolean;
     createReadonlyEditor(host: any): void;
@@ -64,19 +77,23 @@ export declare class EveryTextLineEditor {
     confirmUnsavedSourceChange(action?: string): Promise<"save" | "discard" | "cancel">;
     setEditorValue(value: any): void;
     setWordWrap(enabled: any): void;
+    setSpellCheck(enabled: boolean): void;
+    setMonacoMinimap(enabled: boolean): void;
+    applySpellCheckToTextArea(textarea?: HTMLTextAreaElement | null): void;
+    applySpellCheckToMonaco(root?: HTMLElement | null): void;
     cycleIndentMode(): void;
     cycleLanguage(): void;
     setLanguage(lang: Language): void;
     cycleScrollSync(): void;
     setScrollSync(mode: SyncMode): void;
     getCursorPosition(): {
-        line: number;
-        column: number;
+        line: any;
+        column: any;
     };
     getEditorStats(): {
-        chars: number;
-        lines: number;
-        selection: number;
+        chars: any;
+        lines: any;
+        selection: any;
     };
     updateHeader(): void;
     renderTriggerControl(meta: NonNullable<TextSource['metadata']>['triggers']): HTMLButtonElement | HTMLLabelElement;
@@ -92,13 +109,29 @@ export declare class EveryTextLineEditor {
     toggleDiff(): void;
     updateMasterScrollbarHeight(): void;
     renderDiff(): void;
+    getDiffOriginalValue(): string;
     highlightDiff(diff: any): void;
     applyDiffMarks(editor: any, marks: any, activeMark: any): void;
+    getCurrentEditorValue(): any;
+    getMonacoLanguageId(): "markdown" | "yaml" | "plaintext";
+    openMonacoDiff(): Promise<void>;
+    updateMonacoDiffModels(): void;
+    setMonacoDiffLanguage(): void;
+    applyMonacoDiffIndentOptions(): void;
+    closeMonacoDiff({ syncValue }?: {
+        syncValue?: boolean;
+    }): void;
+    disposeMonacoDiff({ syncValue, clearHost }?: {
+        syncValue?: boolean;
+        clearHost?: boolean;
+    }): void;
+    layoutMonacoDiff(focus?: boolean): void;
     updateDirty(isDirty: any): void;
     open(): Promise<void>;
     close(): Promise<void>;
     startResize(event: any): void;
     refreshHistory(): Promise<void>;
     diffHistoryCommit(commit: HistoryCommit): Promise<void>;
+    compareChangedSource(change: ChangedSource): Promise<void>;
     loadHistoryCommit(commit: HistoryCommit): Promise<void>;
 }

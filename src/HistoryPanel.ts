@@ -15,6 +15,7 @@ export interface HistoryPanelDelegate {
     onManualCommit(message: string, changedSources: ChangedSource[]): Promise<void>;
     onSelectCategory(groupName: string): void;
     onSelectSource(sourceId: string): void;
+    onCompareChanged(change: ChangedSource): void;
 }
 
 export class HistoryPanel {
@@ -77,15 +78,17 @@ export class HistoryPanel {
         const messageInput = changes.querySelector('.etle--commitMessage') as HTMLTextAreaElement;
         
         commitBtn.addEventListener('click', async () => {
-            const message = messageInput.value.trim();
+            const message = messageInput.value.trim() || this.createAutoMessage(changedSources);
             await this.delegate.onManualCommit(message, changedSources);
             messageInput.value = '';
         });
 
         const changeList = changes.querySelector('.etle--changeList')!;
         for (const { source, status } of changedSources) {
+            const change = changedSources.find(item => item.source.id === source.id)!;
             const row = this.renderFileRow(source, status);
-            row.addEventListener('click', () => this.delegate.onSelectSource(source.id));
+            row.title = 'Compare latest commit with current editor text';
+            row.addEventListener('click', () => this.delegate.onCompareChanged(change));
             changeList.append(row);
         }
 
@@ -145,6 +148,7 @@ export class HistoryPanel {
                 for (const commit of group.commits) {
                     const source = allSources.find(s => s.id === commit.sourceId) || { label: commit.sourceLabel, group: commit.sourceGroup } as TextSource;
                     const fileRow = this.renderFileRow(source, commit.parentId ? 'M' : 'A', commit);
+                    fileRow.addEventListener('click', () => this.delegate.onDiffCommit(commit));
                     files.append(fileRow);
                 }
                 
@@ -171,7 +175,7 @@ export class HistoryPanel {
             }
             groups.set(key, {
                 id: key,
-                title: commit.meta?.message || (commit.reason.toUpperCase() + (commit.parentId ? '' : ' (Baseline)')),
+                title: commit.meta?.message || (commit.reason === 'initial' ? 'Initial commit' : 'Manual commit'),
                 createdAt: commit.createdAt,
                 reason: commit.reason,
                 commits: [commit],
@@ -202,7 +206,7 @@ export class HistoryPanel {
         if (commit) {
             const diffBtn = document.createElement('span');
             diffBtn.classList.add('fa-solid', 'fa-fw', 'fa-code-compare');
-            diffBtn.title = 'Diff';
+            diffBtn.title = 'Compare with current';
             diffBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -211,7 +215,7 @@ export class HistoryPanel {
             
             const loadBtn = document.createElement('span');
             loadBtn.classList.add('fa-solid', 'fa-fw', 'fa-rotate-left');
-            loadBtn.title = 'Load';
+            loadBtn.title = 'Load File';
             loadBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -235,6 +239,13 @@ export class HistoryPanel {
         if (source.group.includes('Instruct')) return 'IN';
         if (source.group.includes('Context')) return 'C';
         return 'T';
+    }
+
+    private createAutoMessage(changedSources: ChangedSource[]): string {
+        const names = changedSources.map(({ source }) => source.label).filter(Boolean);
+        if (!names.length) return 'Update sources';
+        if (names.length <= 3) return `Update ${names.join(', ')}`;
+        return `Update ${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
     }
 
     private formatTime(timestamp: number): string {

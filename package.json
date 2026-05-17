@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run copy-assets",
-    "copy-assets": "mkdir -p dist/vendor/prism-code-editor dist/vendor/diff && cp -R node_modules/prism-code-editor/dist/. dist/vendor/prism-code-editor/ && cp -R node_modules/diff/libesm/. dist/vendor/diff/",
+    "copy-assets": "mkdir -p dist/vendor/prism-code-editor dist/vendor/diff dist/vendor/monaco-editor/min && cp -R node_modules/prism-code-editor/dist/. dist/vendor/prism-code-editor/ && cp -R node_modules/diff/libesm/. dist/vendor/diff/ && cp -R node_modules/monaco-editor/min/. dist/vendor/monaco-editor/min/",
     "watch": "tsc -p tsconfig.json --watch",
     "check": "tsc -p tsconfig.json --noEmit"
   },
@@ -19,6 +19,7 @@
   "license": "AGPL-3.0",
   "dependencies": {
     "diff": "^9.0.0",
+    "monaco-editor": "^0.55.1",
     "prism-code-editor": "^2.4.1"
   },
   "devDependencies": {

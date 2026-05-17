@@ -1,7 +1,8 @@
-import { INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
+import { EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 
 export type Language = typeof LANGUAGES[number];
 export type SyncMode = typeof SYNC_MODES[number];
+export type EditorEngine = typeof EDITOR_ENGINES[number];
 export type SidebarTab = 'sources' | 'history' | 'settings';
 export type TextField = readonly [property: string, label: string, selector?: string];
 export type DiffMark = '' | 'added' | 'removed' | 'placeholder';
@@ -15,6 +16,7 @@ export type IndentMode = typeof INDENT_MODES[number];
 export interface ChangedSource {
     source: TextSource;
     status: 'A' | 'M' | 'D';
+    latest?: HistoryCommit | null;
 }
 
 export interface HistoryCommit {
@@ -22,9 +24,12 @@ export interface HistoryCommit {
     sourceId: string;
     sourceLabel: string;
     sourceGroup: string;
+    scopeId: string;
+    scopeType: string;
+    scopeLabel: string;
     createdAt: number;
     parentId: string | null;
-    reason: 'apply' | 'restore' | 'manual';
+    reason: 'manual' | 'initial' | 'load';
     content: string;
     hash: string;
     meta?: {
@@ -37,12 +42,22 @@ export interface HistoryCommit {
 }
 
 export interface HistorySource {
+    sourceKey: string;
     sourceId: string;
+    scopeId: string;
+    scopeType: string;
+    scopeLabel: string;
     latestCommitId: string | null;
     latestHash: string | null;
     updatedAt: number;
     label: string;
     group: string;
+}
+
+export interface HistoryScope {
+    scopeId: string;
+    scopeType: string;
+    scopeLabel: string;
 }
 
 export interface BranchManager {
@@ -99,6 +114,10 @@ export interface PrismEditorLike {
     wrapper: HTMLElement;
     setOptions(options: Record<string, any>): void;
     update?(): void;
+    focus?(): void;
+    getCursorPosition?(): CursorPosition;
+    getSelectionLength?(): number;
+    dispose?(): void;
 }
 
 export interface DomRefs {
@@ -128,6 +147,7 @@ export interface DomRefs {
     workspace?: HTMLDivElement;
     oldEditorHost?: HTMLDivElement;
     editorHost?: HTMLDivElement;
+    monacoDiffHost?: HTMLDivElement;
     statusDirty?: HTMLElement;
     statusSourceCount?: HTMLElement;
     statusStats?: HTMLElement;
@@ -135,8 +155,12 @@ export interface DomRefs {
     statusSelection?: HTMLElement;
     statusIndent?: HTMLButtonElement;
     statusWrap?: HTMLButtonElement;
+    statusSpellCheck?: HTMLButtonElement;
+    statusMinimap?: HTMLButtonElement;
     statusLanguage?: HTMLButtonElement;
+    statusEngine?: HTMLButtonElement;
     statusScrollSync?: HTMLButtonElement;
+    editorEngine?: HTMLSelectElement;
     statusBranch?: HTMLSelectElement;
     masterScrollbar?: HTMLDivElement;
     masterScrollContent?: HTMLDivElement;

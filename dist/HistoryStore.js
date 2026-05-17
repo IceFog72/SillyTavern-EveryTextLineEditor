@@ -10,13 +10,17 @@ export class HistoryStore {
                 const db = request.result;
                 if (!db.objectStoreNames.contains('commits')) {
                     const commits = db.createObjectStore('commits', { keyPath: 'id' });
-                    commits.createIndex('sourceId', 'sourceId', { unique: false });
-                    commits.createIndex('createdAt', 'createdAt', { unique: false });
-                    commits.createIndex('sourceId_createdAt', ['sourceId', 'createdAt'], { unique: false });
+                    this.createCommitIndexes(commits);
                 }
-                if (!db.objectStoreNames.contains('sources')) {
-                    db.createObjectStore('sources', { keyPath: 'sourceId' });
+                else {
+                    this.ensureCommitIndexes(request.transaction.objectStore('commits'));
                 }
+                if (db.objectStoreNames.contains('sources')) {
+                    db.deleteObjectStore('sources');
+                }
+                const sources = db.createObjectStore('sources', { keyPath: 'sourceKey' });
+                sources.createIndex('scopeId', 'scopeId', { unique: false });
+                sources.createIndex('source_scope', ['sourceId', 'scopeId'], { unique: true });
             };
             request.onsuccess = () => {
                 this.db = request.result;
@@ -25,22 +29,23 @@ export class HistoryStore {
             request.onerror = () => reject(request.error);
         });
     }
-    async commit(source, content, reason, message, batchId) {
+    async commit(source, content, reason, message, batchId, scope) {
         if (!this.db || source.readonly)
             return null;
         const hash = await this.hashContent(content);
-        const sourceId = source.id;
-        // Check for duplicates
-        const latestSource = await this.getLatestSource(sourceId);
-        if (latestSource?.latestHash === hash) {
+        const latestSource = await this.getLatestSource(source.id, scope.scopeId);
+        if (latestSource?.latestHash === hash)
             return null;
-        }
+        const createdAt = Date.now();
         const commit = {
-            id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-            sourceId,
+            id: `${createdAt}-${Math.random().toString(36).slice(2, 9)}`,
+            sourceId: source.id,
             sourceLabel: source.label,
             sourceGroup: source.group,
-            createdAt: Date.now(),
+            scopeId: scope.scopeId,
+            scopeType: scope.scopeType,
+            scopeLabel: scope.scopeLabel,
+            createdAt,
             parentId: latestSource?.latestCommitId ?? null,
             reason,
             content,
@@ -53,10 +58,14 @@ export class HistoryStore {
             },
         };
         const historySource = {
-            sourceId,
+            sourceKey: this.getSourceKey(source.id, scope.scopeId),
+            sourceId: source.id,
+            scopeId: scope.scopeId,
+            scopeType: scope.scopeType,
+            scopeLabel: scope.scopeLabel,
             latestCommitId: commit.id,
             latestHash: hash,
-            updatedAt: commit.createdAt,
+            updatedAt: createdAt,
             label: source.label,
             group: source.group,
         };
@@ -65,21 +74,19 @@ export class HistoryStore {
             transaction.objectStore('commits').add(commit);
             transaction.objectStore('sources').put(historySource);
             transaction.oncomplete = () => {
-                this.pruneSource(sourceId, 100).catch(err => console.error('[HistoryStore] Prune failed', err));
+                this.pruneSource(source.id, scope.scopeId, 100).catch(err => console.error('[HistoryStore] Prune failed', err));
                 resolve(commit);
             };
             transaction.onerror = () => reject(transaction.error);
         });
     }
-    async listCommits(sourceId, limit = 100) {
+    async listCommits(sourceId, scopeId, limit = 100) {
         if (!this.db)
             return [];
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction('commits', 'readonly');
-            const store = transaction.objectStore('commits');
-            const index = store.index('sourceId_createdAt');
-            // Range from [sourceId, 0] to [sourceId, Date.now()] in reverse
-            const range = IDBKeyRange.bound([sourceId, 0], [sourceId, Date.now()]);
+            const index = transaction.objectStore('commits').index('source_scope_createdAt');
+            const range = IDBKeyRange.bound([sourceId, scopeId, 0], [sourceId, scopeId, Date.now()]);
             const request = index.openCursor(range, 'prev');
             const results = [];
             request.onsuccess = () => {
@@ -87,10 +94,30 @@ export class HistoryStore {
                 if (cursor && results.length < limit) {
                     results.push(cursor.value);
                     cursor.continue();
+                    return;
                 }
-                else {
-                    resolve(results);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+    async listCommitsByScope(scopeId, limit = 200) {
+        if (!this.db)
+            return [];
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction('commits', 'readonly');
+            const index = transaction.objectStore('commits').index('scope_createdAt');
+            const range = IDBKeyRange.bound([scopeId, 0], [scopeId, Date.now()]);
+            const request = index.openCursor(range, 'prev');
+            const results = [];
+            request.onsuccess = () => {
+                const cursor = request.result;
+                if (cursor && results.length < limit) {
+                    results.push(cursor.value);
+                    cursor.continue();
+                    return;
                 }
+                resolve(results);
             };
             request.onerror = () => reject(request.error);
         });
@@ -105,10 +132,10 @@ export class HistoryStore {
             request.onerror = () => reject(request.error);
         });
     }
-    async pruneSource(sourceId, keepCount) {
+    async pruneSource(sourceId, scopeId, keepCount) {
         if (!this.db)
             return 0;
-        const commits = await this.listCommits(sourceId, 500); // Get a larger sample to prune
+        const commits = await this.listCommits(sourceId, scopeId, 500);
         if (commits.length <= keepCount)
             return 0;
         const toDelete = commits.slice(keepCount);
@@ -120,12 +147,12 @@ export class HistoryStore {
             transaction.onerror = () => reject(transaction.error);
         });
     }
-    async getLatestSource(sourceId) {
+    async getLatestSource(sourceId, scopeId) {
         if (!this.db)
             return null;
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction('sources', 'readonly');
-            const request = transaction.objectStore('sources').get(sourceId);
+            const request = transaction.objectStore('sources').get(this.getSourceKey(sourceId, scopeId));
             request.onsuccess = () => resolve(request.result || null);
             request.onerror = () => reject(request.error);
         });
@@ -137,16 +164,39 @@ export class HistoryStore {
             const hashArray = Array.from(new Uint8Array(hashBuffer));
             return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         }
-        catch (err) {
-            // Fallback to simple hash if crypto is unavailable
+        catch {
             let hash = 0;
-            for (let i = 0; i < content.length; i++) {
-                const char = content.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
+            for (let index = 0; index < content.length; index++) {
+                hash = ((hash << 5) - hash) + content.charCodeAt(index);
                 hash |= 0;
             }
             return `fallback-${hash}`;
         }
+    }
+    getSourceKey(sourceId, scopeId) {
+        return `${scopeId}::${sourceId}`;
+    }
+    createCommitIndexes(commits) {
+        commits.createIndex('sourceId', 'sourceId', { unique: false });
+        commits.createIndex('scopeId', 'scopeId', { unique: false });
+        commits.createIndex('batchId', 'meta.batchId', { unique: false });
+        commits.createIndex('createdAt', 'createdAt', { unique: false });
+        commits.createIndex('sourceId_createdAt', ['sourceId', 'createdAt'], { unique: false });
+        commits.createIndex('source_scope_createdAt', ['sourceId', 'scopeId', 'createdAt'], { unique: false });
+        commits.createIndex('scope_createdAt', ['scopeId', 'createdAt'], { unique: false });
+    }
+    ensureCommitIndexes(commits) {
+        const ensure = (name, keyPath) => {
+            if (!commits.indexNames.contains(name))
+                commits.createIndex(name, keyPath, { unique: false });
+        };
+        ensure('sourceId', 'sourceId');
+        ensure('scopeId', 'scopeId');
+        ensure('batchId', 'meta.batchId');
+        ensure('createdAt', 'createdAt');
+        ensure('sourceId_createdAt', ['sourceId', 'createdAt']);
+        ensure('source_scope_createdAt', ['sourceId', 'scopeId', 'createdAt']);
+        ensure('scope_createdAt', ['scopeId', 'createdAt']);
     }
 }
 //# sourceMappingURL=HistoryStore.js.map
