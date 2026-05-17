@@ -1,12 +1,20 @@
 {
     "display_name": "Every Text Line Editor",
     "loading_order": 1,
-    "requires": [],
-    "optional": [],
     "js": "dist/index.js",
     "css": "style.css",
     "author": "IceFog72",
     "version": "0.1.0",
     "homePage": "https://github.com/IceFog72/SillyTavern-EveryTextLineEditor/",
-    "auto_update": true
+    "auto_update": true,
+    "minimum_client_version": "1.12.0",
+    "hooks": {
+        "install": "onInstall",
+        "update": "onUpdate",
+        "delete": "onDelete",
+        "enable": "onEnable",
+        "disable": "onDisable",
+        "activate": "onActivate",
+        "clean": "onClean"
+    }
 }

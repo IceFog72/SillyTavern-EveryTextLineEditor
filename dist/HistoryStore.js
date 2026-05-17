@@ -157,6 +157,26 @@ export class HistoryStore {
             request.onerror = () => reject(request.error);
         });
     }
+    async exportAll() {
+        if (!this.db)
+            return { commits: [], sources: [] };
+        const [commits, sources] = await Promise.all([
+            this.getAllFromStore('commits'),
+            this.getAllFromStore('sources'),
+        ]);
+        return { commits, sources };
+    }
+    async clearAll() {
+        if (!this.db)
+            return;
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(['commits', 'sources'], 'readwrite');
+            transaction.objectStore('commits').clear();
+            transaction.objectStore('sources').clear();
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
     async hashContent(content) {
         try {
             const msgBuffer = new TextEncoder().encode(content);
@@ -172,6 +192,14 @@ export class HistoryStore {
             }
             return `fallback-${hash}`;
         }
+    }
+    async getAllFromStore(storeName) {
+        return new Promise((resolve, reject) => {
+            const transaction = this.db.transaction(storeName, 'readonly');
+            const request = transaction.objectStore(storeName).getAll();
+            request.onsuccess = () => resolve(request.result || []);
+            request.onerror = () => reject(request.error);
+        });
     }
     getSourceKey(sourceId, scopeId) {
         return `${scopeId}::${sourceId}`;

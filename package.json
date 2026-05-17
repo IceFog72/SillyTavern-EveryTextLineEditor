@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run copy-assets",
-    "copy-assets": "mkdir -p dist/vendor/prism-code-editor dist/vendor/diff dist/vendor/monaco-editor/min && cp -R node_modules/prism-code-editor/dist/. dist/vendor/prism-code-editor/ && cp -R node_modules/diff/libesm/. dist/vendor/diff/ && cp -R node_modules/monaco-editor/min/. dist/vendor/monaco-editor/min/",
+    "copy-assets": "mkdir -p dist/vendor/prism-code-editor dist/vendor/diff dist/vendor/monaco-editor/min dist/vendor/monaco-spellchecker dist/vendor/typo-js/dictionaries/en_US && cp -R node_modules/prism-code-editor/dist/. dist/vendor/prism-code-editor/ && cp -R node_modules/diff/libesm/. dist/vendor/diff/ && cp -R node_modules/monaco-editor/min/. dist/vendor/monaco-editor/min/ && cp node_modules/monaco-spellchecker/lib/spellchecker.es.js dist/vendor/monaco-spellchecker/spellchecker.es.js && cp node_modules/typo-js/typo.js dist/vendor/typo-js/typo.js && cp node_modules/typo-js/dictionaries/en_US/en_US.aff dist/vendor/typo-js/dictionaries/en_US/en_US.aff && cp node_modules/typo-js/dictionaries/en_US/en_US.dic dist/vendor/typo-js/dictionaries/en_US/en_US.dic",
     "watch": "tsc -p tsconfig.json --watch",
     "check": "tsc -p tsconfig.json --noEmit"
   },
@@ -20,7 +20,9 @@
   "dependencies": {
     "diff": "^9.0.0",
     "monaco-editor": "^0.55.1",
-    "prism-code-editor": "^2.4.1"
+    "monaco-spellchecker": "^0.6.0",
+    "prism-code-editor": "^2.4.1",
+    "typo-js": "^1.3.2"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

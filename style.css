@@ -174,6 +174,11 @@
     flex-direction: column;
 }
 
+.etle--settingsPanel {
+    display: flex;
+    flex-direction: column;
+}
+
 .etle--historyPanel {
     overflow: hidden;
 }
@@ -413,6 +418,18 @@
     display: none;
 }
 
+.etle--sourceSubgroup {
+    margin: 0.2rem 0 0.08rem 1.85rem;
+    max-width: calc(100% - 2rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.68rem;
+    font-weight: 700;
+    opacity: 0.56;
+    text-transform: uppercase;
+}
+
 .etle--source {
     grid-template-columns: 1.45rem minmax(0, 1fr);
     padding: 0 0.22rem 0 0.35rem;
@@ -421,9 +438,22 @@
 }
 
 .etle--sourceSelect {
-    grid-template-columns: 1rem minmax(0, 1fr);
+    grid-template-columns: 2.25rem minmax(0, 1fr);
     padding: 0.22rem 0.15rem 0.22rem 0;
     min-width: 0;
+}
+
+.etle--sourceLang {
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 3px;
+    padding: 0.05rem 0.18rem;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
+    font-size: 0.62rem;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: center;
+    opacity: 0.82;
 }
 
 .etle--sourceSelect:disabled {
@@ -568,7 +598,6 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
 }
 
 .etle--textButton:disabled {
@@ -974,25 +1003,20 @@
 }
 
 .etle--settingsHead {
-    padding: 0.75rem 1rem;
+    padding: 0.55rem 0.75rem;
     border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, transparent);
 }
 
 .etle--settingsHead h4 {
-    margin: 0 0 0.25rem 0;
-}
-
-.etle--settingsHead p {
     margin: 0;
-    font-size: 0.85em;
-    opacity: 0.7;
+    font-size: 0.92rem;
 }
 
 .etle--settingsBody {
-    padding: 1rem;
+    padding: 0.6rem;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.65rem;
     min-height: 0;
     overflow: auto;
 }
@@ -1000,18 +1024,26 @@
 .etle--propGroup {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.3rem;
+    min-width: 0;
 }
 
 .etle--propGroup>span {
     font-weight: 600;
-    font-size: 0.9em;
+    font-size: 0.78rem;
+    opacity: 0.82;
 }
 
 .etle--settingsButtonRow {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
-    gap: 0.35rem;
+    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+    gap: 0.3rem;
+}
+
+.etle--settingsGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: 0.5rem;
 }
 
 .etle--settingsBody small {

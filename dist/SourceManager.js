@@ -11,17 +11,24 @@ import { getPresetManager } from '../../../../preset-manager.js';
 // @ts-ignore
 import { loadWorldInfo, reloadEditor, saveWorldInfo, world_names } from '../../../../world-info.js';
 // @ts-ignore
+import { textgenerationwebui_preset_names, textgenerationwebui_settings } from '../../../../textgen-settings.js';
+// @ts-ignore
+import { extension_settings } from '../../../../extensions.js';
+// @ts-ignore
 import { saveSettingsDebounced } from '../../../../../script.js';
 import { diffLines } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 const GROUP_ORDER = {
     'Chat Completion Prompts': 10,
     'Utility Prompts': 20,
-    'Formatting Prompts': 30,
-    'Power User Context': 40,
-    'Power User Instruct': 50,
-    'System Prompt': 60,
-    'Personas': 70,
+    'Text Completion Parameters': 30,
+    'Formatting Prompts': 40,
+    'Custom OpenAI Parameters': 50,
+    'Power User Context': 60,
+    'Power User Instruct': 70,
+    'System Prompt': 80,
+    'Connection Profiles': 90,
+    'Personas': 100,
 };
 export const getCollapsedGroups = () => {
     try {
@@ -216,11 +223,82 @@ const makeSystemPromptFieldSource = (property, label) => {
         meta: power_user?.sysprompt?.name ? `System prompt preset: ${power_user.sysprompt.name}` : 'System prompt preset',
     };
 };
+const saveTextGenPreset = async () => {
+    saveSettingsDebounced();
+    const name = textgenerationwebui_settings?.preset;
+    const presetManager = getPresetManager?.('textgenerationwebui');
+    if (!name || !presetManager?.savePreset)
+        return;
+    await presetManager.savePreset(name, {
+        ...textgenerationwebui_settings,
+        name,
+    }, { skipUpdate: true });
+};
+const makeTextGenFieldSource = (property, label) => {
+    const branchManager = getBranchManager('Text Completion Parameters');
+    const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+    return {
+        id: `textgenerationwebui_settings:${property}${branchSuffix}`,
+        label,
+        group: 'Text Completion Parameters',
+        groupOrder: GROUP_ORDER['Text Completion Parameters'],
+        readonly: false,
+        branchManager,
+        read: () => {
+            const value = textgenerationwebui_settings?.[property];
+            return typeof value === 'string' ? value : JSON.stringify(value ?? '', null, 2);
+        },
+        write: (value) => {
+            textgenerationwebui_settings[property] = value;
+            const field = document.querySelector(`#${property}_textgenerationwebui, #${property}, #textgen_${property}`);
+            if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
+                field.value = value;
+                field.dispatchEvent(new Event('input', { bubbles: true }));
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        },
+        save: saveTextGenPreset,
+        meta: textgenerationwebui_settings?.preset ? `Text Completion preset: ${textgenerationwebui_settings.preset}` : 'Text Completion preset',
+    };
+};
+const getConnectionManagerProfiles = () => {
+    const profiles = extension_settings?.connectionManager?.profiles;
+    return Array.isArray(profiles) ? profiles : [];
+};
+const getSelectedConnectionProfile = () => {
+    const selected = extension_settings?.connectionManager?.selectedProfile;
+    return getConnectionManagerProfiles().find(profile => profile.id === selected) ?? null;
+};
+const makeConnectionProfileSource = (profile) => {
+    const branchManager = getBranchManager('Connection Profiles');
+    const profileId = String(profile.id ?? profile.name ?? 'unknown');
+    return {
+        id: `connection-profile:${profileId}`,
+        label: String(profile.name ?? profileId),
+        group: 'Connection Profiles',
+        groupOrder: GROUP_ORDER['Connection Profiles'],
+        readonly: false,
+        branchManager,
+        read: () => JSON.stringify(profile, null, 2),
+        write: (value) => {
+            const parsed = JSON.parse(value);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                throw new Error('Connection profile must be a JSON object.');
+            }
+            for (const key of Object.keys(profile))
+                delete profile[key];
+            Object.assign(profile, parsed);
+        },
+        save: () => saveSettingsDebounced(),
+        meta: 'Connection Manager profile JSON',
+    };
+};
 const getBranchManager = (group) => {
     switch (group) {
         case 'Chat Completion Prompts':
         case 'Utility Prompts':
         case 'Formatting Prompts':
+        case 'Custom OpenAI Parameters':
             return {
                 getBranches: () => Object.keys(openai_setting_names || {}),
                 getCurrentBranch: () => oai_settings?.preset_settings_openai ?? 'Default',
@@ -233,6 +311,41 @@ const getBranchManager = (group) => {
                             select.value = value;
                             select.dispatchEvent(new Event('change', { bubbles: true }));
                         }
+                    }
+                }
+            };
+        case 'Text Completion Parameters':
+            return {
+                getBranches: () => textgenerationwebui_preset_names || [],
+                getCurrentBranch: () => textgenerationwebui_settings?.preset ?? 'Default',
+                switchBranch: async (branchName) => {
+                    textgenerationwebui_settings.preset = branchName;
+                    const select = document.querySelector('#settings_preset_textgenerationwebui');
+                    if (select) {
+                        select.value = branchName;
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                }
+            };
+        case 'Connection Profiles':
+            return {
+                getBranches: () => getConnectionManagerProfiles().map(profile => String(profile.name ?? profile.id)),
+                getCurrentBranch: () => {
+                    const profile = getSelectedConnectionProfile();
+                    return String(profile?.name ?? profile?.id ?? 'None');
+                },
+                switchBranch: async (branchName) => {
+                    const profile = getConnectionManagerProfiles().find(item => item.name === branchName || item.id === branchName);
+                    if (!profile)
+                        return;
+                    extension_settings.connectionManager.selectedProfile = profile.id;
+                    const select = document.querySelector('#connection_profiles');
+                    if (select) {
+                        select.value = profile.id;
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    else {
+                        saveSettingsDebounced();
                     }
                 }
             };
@@ -449,6 +562,24 @@ export const getSources = async () => {
                 selector,
             }));
         }
+        for (const [property, label] of TEXT_FIELDS.customOpenAi) {
+            if (typeof oai_settings[property] !== 'string')
+                continue;
+            sources.push(makeObjectFieldSource({
+                id: `oai_settings:${property}`,
+                label,
+                group: 'Custom OpenAI Parameters',
+                object: oai_settings,
+                property,
+            }));
+        }
+    }
+    if (textgenerationwebui_settings) {
+        for (const [property, label] of TEXT_FIELDS.textgen) {
+            if (!(property in textgenerationwebui_settings))
+                continue;
+            sources.push(makeTextGenFieldSource(property, label));
+        }
     }
     if (power_user?.context) {
         for (const [property, label] of TEXT_FIELDS.context) {
@@ -498,6 +629,9 @@ export const getSources = async () => {
                 save: () => saveSettingsDebounced(),
             });
         }
+    }
+    for (const profile of getConnectionManagerProfiles()) {
+        sources.push(makeConnectionProfileSource(profile));
     }
     if (Array.isArray(world_names) && world_names.length) {
         for (const worldName of world_names) {

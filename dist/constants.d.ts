@@ -10,6 +10,7 @@ export declare const STORAGE: {
     indentMode: string;
     scrollSync: string;
     editorEngine: string;
+    sourceLanguages: string;
 };
 export declare const DB: {
     readonly NAME: `${string}:history`;
@@ -34,6 +35,9 @@ export declare const INDENT_MODES: readonly [{
 export declare const LANGUAGES: readonly [{
     readonly id: "markdown";
     readonly label: ".md";
+}, {
+    readonly id: "json";
+    readonly label: ".json";
 }, {
     readonly id: "yaml";
     readonly label: ".yaml";

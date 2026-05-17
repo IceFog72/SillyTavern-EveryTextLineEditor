@@ -12,6 +12,7 @@ export const STORAGE = {
     indentMode: `${NAME}:indentMode`,
     scrollSync: `${NAME}:scrollSync`,
     editorEngine: `${NAME}:editorEngine`,
+    sourceLanguages: `${NAME}:sourceLanguages`,
 };
 export const DB = {
     NAME: `${NAME}:history`,
@@ -24,6 +25,7 @@ export const INDENT_MODES = [
 ];
 export const LANGUAGES = [
     { id: 'markdown', label: '.md' },
+    { id: 'json', label: '.json' },
     { id: 'yaml', label: '.yaml' },
     { id: 'text', label: 'text' },
 ];
@@ -72,6 +74,18 @@ export const TEXT_FIELDS = {
     sysprompt: [
         ['content', 'System Prompt Content'],
         ['post_history', 'Post-History System Prompt'],
+    ],
+    textgen: [
+        ['negative_prompt', 'Negative Prompt'],
+        ['grammar_string', 'Grammar String'],
+        ['banned_tokens', 'Banned Tokens'],
+        ['global_banned_tokens', 'Global Banned Tokens'],
+        ['dry_sequence_breakers', 'DRY Sequence Breakers'],
+    ],
+    customOpenAi: [
+        ['custom_include_body', 'Custom Include Body'],
+        ['custom_exclude_body', 'Custom Exclude Body'],
+        ['custom_include_headers', 'Custom Include Headers'],
     ],
     utility: [
         ['send_if_empty', 'Empty User Message Replacement', '#send_if_empty_textarea'],

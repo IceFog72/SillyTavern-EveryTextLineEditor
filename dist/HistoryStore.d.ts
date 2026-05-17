@@ -8,7 +8,13 @@ export declare class HistoryStore {
     getCommit(id: string): Promise<HistoryCommit | null>;
     pruneSource(sourceId: string, scopeId: string, keepCount: number): Promise<number>;
     getLatestSource(sourceId: string, scopeId: string): Promise<HistorySource | null>;
+    exportAll(): Promise<{
+        commits: HistoryCommit[];
+        sources: HistorySource[];
+    }>;
+    clearAll(): Promise<void>;
     hashContent(content: string): Promise<string>;
+    private getAllFromStore;
     private getSourceKey;
     private createCommitIndexes;
     private ensureCommitIndexes;

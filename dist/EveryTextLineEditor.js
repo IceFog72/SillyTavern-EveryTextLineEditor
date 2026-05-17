@@ -2,14 +2,18 @@
 import { setSlashCommandAutoComplete } from '../../../../slash-commands.js';
 // @ts-ignore
 import { Popup, POPUP_RESULT } from '../../../../popup.js';
+// @ts-ignore
+import { download } from '../../../../utils.js';
 import { createEditor, languageMap, Prism } from './vendor/prism-code-editor/index.js';
 import { defaultCommands } from './vendor/prism-code-editor/extensions/commands.js';
 import { indentGuides } from './vendor/prism-code-editor/extensions/guides.js';
 import { matchBrackets } from './vendor/prism-code-editor/extensions/matchBrackets/index.js';
 import { highlightBracketPairs } from './vendor/prism-code-editor/extensions/matchBrackets/highlight.js';
 import { searchWidget } from './vendor/prism-code-editor/extensions/search/index.js';
+import { getSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es.js';
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
+import './vendor/prism-code-editor/grammars/json.js';
 import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 import { getCollapsedGroups, getLineDiff, getSources, setCollapsedGroups } from './SourceManager.js';
 import { HistoryStore } from './HistoryStore.js';
@@ -28,7 +32,18 @@ const getEditorEngine = () => {
 };
 const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
 const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
+const getStoredSourceLanguages = () => {
+    try {
+        const stored = JSON.parse(localStorage.getItem(STORAGE.sourceLanguages) || '{}');
+        return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+    }
+    catch {
+        return {};
+    }
+};
 let monacoLoadPromise = null;
+let typoLoadPromise = null;
+let englishDictionaryPromise = null;
 const loadMonaco = async () => {
     if (globalThis.monaco?.editor)
         return globalThis.monaco;
@@ -62,6 +77,46 @@ const loadMonaco = async () => {
     });
     return monacoLoadPromise;
 };
+const loadTypo = async () => {
+    if (globalThis.Typo)
+        return globalThis.Typo;
+    if (typoLoadPromise)
+        return typoLoadPromise;
+    typoLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = new URL('./vendor/typo-js/typo.js', import.meta.url).toString();
+        script.onload = () => {
+            if (globalThis.Typo)
+                resolve(globalThis.Typo);
+            else
+                reject(new Error('Typo.js loaded, but window.Typo was not found.'));
+        };
+        script.onerror = () => reject(new Error('Failed to load Typo.js.'));
+        document.head.append(script);
+    });
+    return typoLoadPromise;
+};
+const loadEnglishDictionary = async () => {
+    if (englishDictionaryPromise)
+        return englishDictionaryPromise;
+    englishDictionaryPromise = (async () => {
+        const Typo = await loadTypo();
+        const baseUrl = new URL('./vendor/typo-js/dictionaries/en_US/', import.meta.url);
+        const [affResponse, dicResponse] = await Promise.all([
+            fetch(new URL('en_US.aff', baseUrl)),
+            fetch(new URL('en_US.dic', baseUrl)),
+        ]);
+        if (!affResponse.ok || !dicResponse.ok) {
+            throw new Error('Failed to load en_US spellcheck dictionary.');
+        }
+        const [affData, wordsData] = await Promise.all([
+            affResponse.text(),
+            dicResponse.text(),
+        ]);
+        return new Typo('en_US', affData, wordsData);
+    })();
+    return englishDictionaryPromise;
+};
 export class EveryTextLineEditor {
     sources;
     selectedSource;
@@ -74,6 +129,11 @@ export class EveryTextLineEditor {
     editor;
     oldEditor;
     editorReady;
+    monacoEditor;
+    monacoSpellcheckers;
+    monacoSpellcheckFrame;
+    monacoUserDictionary;
+    monacoIgnoredWords;
     monacoDiffEditor;
     monacoDiffOriginalModel;
     monacoDiffModifiedModel;
@@ -88,6 +148,7 @@ export class EveryTextLineEditor {
     historyStore;
     historyPanel;
     historyCommit;
+    sourceLanguages;
     constructor() {
         this.sources = [];
         this.selectedSource = null;
@@ -97,6 +158,11 @@ export class EveryTextLineEditor {
         this.editor = null;
         this.oldEditor = null;
         this.editorReady = Promise.resolve();
+        this.monacoEditor = null;
+        this.monacoSpellcheckers = [];
+        this.monacoSpellcheckFrame = null;
+        this.monacoUserDictionary = new Set();
+        this.monacoIgnoredWords = new Set();
         this.monacoDiffEditor = null;
         this.monacoDiffOriginalModel = null;
         this.monacoDiffModifiedModel = null;
@@ -110,6 +176,7 @@ export class EveryTextLineEditor {
         this.selectedSidebarTab = 'sources';
         this.selectedHistoryGroup = '';
         this.historyStore = new HistoryStore();
+        this.sourceLanguages = getStoredSourceLanguages();
         const storedSync = localStorage.getItem(STORAGE.scrollSync);
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
@@ -117,6 +184,21 @@ export class EveryTextLineEditor {
         this.renderDrawer();
         await this.editorReady;
         await this.refreshSources();
+    }
+    destroy() {
+        this.closeMonacoDiff({ syncValue: true });
+        this.disposeMonacoSpellcheckers();
+        this.editor?.dispose?.();
+        this.oldEditor?.dispose?.();
+        this.dom.drawer?.remove();
+        this.sources = [];
+        this.selectedSource = null;
+        this.editor = null;
+        this.oldEditor = null;
+        this.monacoEditor = null;
+        if (window.EveryTextLineEditor === this) {
+            delete window.EveryTextLineEditor;
+        }
     }
     renderDrawer() {
         const drawer = document.createElement('div');
@@ -244,7 +326,7 @@ export class EveryTextLineEditor {
         settingsPanel.dataset.tab = 'settings';
         const settingsHead = document.createElement('div');
         settingsHead.classList.add('etle--settingsHead');
-        settingsHead.innerHTML = '<h4>Settings</h4><p>Editor preferences and local history controls.</p>';
+        settingsHead.innerHTML = '<h4>Settings</h4>';
         settingsPanel.append(settingsHead);
         const settingsBody = document.createElement('div');
         settingsBody.classList.add('etle--settingsBody');
@@ -260,7 +342,9 @@ export class EveryTextLineEditor {
         editorButtons.append(wrapButton, spellButton, minimapButton);
         editorGroup.append(editorButtons);
         settingsBody.append(editorGroup);
-        const engineGroup = this.createPropGroup('Editor Engine');
+        const editorSelects = document.createElement('div');
+        editorSelects.classList.add('etle--settingsGrid');
+        const engineGroup = this.createPropGroup('Engine');
         const engineSelect = document.createElement('select');
         this.dom.editorEngine = engineSelect;
         engineSelect.classList.add('text_pole');
@@ -279,7 +363,7 @@ export class EveryTextLineEditor {
             });
         });
         engineGroup.append(engineSelect);
-        settingsBody.append(engineGroup);
+        editorSelects.append(engineGroup);
         const indentGroup = this.createPropGroup('Indentation');
         const indentSelect = document.createElement('select');
         indentSelect.classList.add('text_pole');
@@ -300,7 +384,7 @@ export class EveryTextLineEditor {
             this.updateStatusBar();
         });
         indentGroup.append(indentSelect);
-        settingsBody.append(indentGroup);
+        editorSelects.append(indentGroup);
         const languageGroup = this.createPropGroup('Language');
         const languageSelect = document.createElement('select');
         languageSelect.classList.add('text_pole');
@@ -315,8 +399,8 @@ export class EveryTextLineEditor {
             this.setLanguage(LANGUAGES.find(item => item.id === languageSelect.value) ?? LANGUAGES[0]);
         });
         languageGroup.append(languageSelect);
-        settingsBody.append(languageGroup);
-        const syncGroup = this.createPropGroup('Diff Scroll Sync');
+        editorSelects.append(languageGroup);
+        const syncGroup = this.createPropGroup('Scroll Sync');
         const syncSelect = document.createElement('select');
         syncSelect.classList.add('text_pole');
         for (const mode of SYNC_MODES) {
@@ -330,31 +414,39 @@ export class EveryTextLineEditor {
             this.setScrollSync(SYNC_MODES.find(item => item.id === syncSelect.value) ?? SYNC_MODES[1]);
         });
         syncGroup.append(syncSelect);
-        settingsBody.append(syncGroup);
-        const limitGroup = this.createPropGroup('Limit Commits per Source');
+        editorSelects.append(syncGroup);
+        settingsBody.append(editorSelects);
+        const historyGroup = this.createPropGroup('History');
+        const historyGrid = document.createElement('div');
+        historyGrid.classList.add('etle--settingsGrid');
+        const limitGroup = this.createPropGroup('Commits per Source');
         const limitInput = document.createElement('input');
         limitInput.type = 'number';
         limitInput.value = '100';
         limitInput.disabled = true;
         limitInput.classList.add('text_pole');
         limitGroup.append(limitInput);
-        settingsBody.append(limitGroup);
+        historyGrid.append(limitGroup);
         const storageGroup = this.createPropGroup('Storage');
         const storageNote = document.createElement('small');
-        storageNote.textContent = 'History is stored in this browser with IndexedDB. SillyTavern saves are still handled by Apply.';
+        storageNote.textContent = 'IndexedDB, local to this browser. Apply still controls SillyTavern saves.';
         storageGroup.append(storageNote);
-        settingsBody.append(storageGroup);
-        const exportGroup = this.createPropGroup('Export History');
-        const exportBtn = this.makeTextButton('Save all as zip', 'fa-file-zipper', () => alert('Not implemented yet'));
-        exportBtn.disabled = true;
-        exportGroup.append(exportBtn);
-        settingsBody.append(exportGroup);
-        const clearGroup = this.createPropGroup('Clear History');
-        const clearBtn = this.makeTextButton('Clear All History', 'fa-trash', () => alert('Not implemented yet'));
-        clearBtn.classList.add('redUI');
-        clearBtn.disabled = true;
-        clearGroup.append(clearBtn);
-        settingsBody.append(clearGroup);
+        historyGrid.append(storageGroup);
+        historyGroup.append(historyGrid);
+        const historyActions = document.createElement('div');
+        historyActions.classList.add('etle--settingsButtonRow');
+        const exportBtn = this.makeTextButton('Export History', 'fa-file-export', () => this.exportHistory().catch(error => {
+            console.error(`[${NAME}] Failed to export history`, error);
+            globalThis.toastr?.error?.('Failed to export history. See console for details.');
+        }));
+        const clearBtn = this.makeTextButton('Clear History', 'fa-trash', () => this.clearHistory().catch(error => {
+            console.error(`[${NAME}] Failed to clear history`, error);
+            globalThis.toastr?.error?.('Failed to clear history. See console for details.');
+        }));
+        clearBtn.classList.add('redWarningBG');
+        historyActions.append(exportBtn, clearBtn);
+        historyGroup.append(historyActions);
+        settingsBody.append(historyGroup);
         settingsPanel.append(settingsBody);
         sidebarBody.append(settingsPanel);
         this.setSidebarTab(this.selectedSidebarTab);
@@ -495,6 +587,31 @@ export class EveryTextLineEditor {
     createHistoryBatchId() {
         return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     }
+    async exportHistory() {
+        const data = await this.historyStore.exportAll();
+        const payload = {
+            schemaVersion: 1,
+            exportedAt: new Date().toISOString(),
+            extension: NAME,
+            historyDbVersion: 2,
+            ...data,
+        };
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        download(JSON.stringify(payload, null, 2), `${NAME}-history-${stamp}.json`, 'application/json');
+        globalThis.toastr?.success?.(`Exported ${data.commits.length} history snapshots`);
+    }
+    async clearHistory() {
+        const result = await Popup.show.confirm('Clear History', 'Delete all local ETLE history snapshots from this browser? SillyTavern settings and current prompt text will not be changed.', {
+            okButton: 'Clear History',
+            cancelButton: 'Cancel',
+            defaultResult: POPUP_RESULT.CANCELLED,
+        });
+        if (result !== POPUP_RESULT.AFFIRMATIVE)
+            return;
+        await this.historyStore.clearAll();
+        await this.refreshHistory();
+        globalThis.toastr?.success?.('Local ETLE history cleared');
+    }
     getHistoryScope(source, fallback) {
         if (!source)
             return fallback ?? { scopeId: 'global:global', scopeType: 'global', scopeLabel: 'global' };
@@ -502,6 +619,14 @@ export class EveryTextLineEditor {
         if (source.group.includes('Chat Completion') || source.group.includes('Utility') || source.group.includes('Formatting')) {
             const label = currentBranch || 'Default';
             return { scopeId: `openai-preset:${label}`, scopeType: 'openai-preset', scopeLabel: label };
+        }
+        if (source.group.includes('Custom OpenAI')) {
+            const label = currentBranch || 'Default';
+            return { scopeId: `openai-preset:${label}`, scopeType: 'openai-preset', scopeLabel: label };
+        }
+        if (source.group.includes('Text Completion')) {
+            const label = currentBranch || 'Default';
+            return { scopeId: `textgen-preset:${label}`, scopeType: 'textgen-preset', scopeLabel: label };
         }
         if (source.group.includes('Instruct')) {
             const label = currentBranch || 'Default';
@@ -521,6 +646,11 @@ export class EveryTextLineEditor {
         }
         if (source.group.includes('Persona')) {
             return { scopeId: 'persona:active', scopeType: 'persona', scopeLabel: 'Active Persona' };
+        }
+        if (source.group.includes('Connection Profiles')) {
+            const id = source.id.replace(/^connection-profile:/, '') || source.label || 'unknown';
+            const label = source.label || currentBranch || id;
+            return { scopeId: `connection-profile:${id}`, scopeType: 'connection-profile', scopeLabel: label };
         }
         return fallback ?? { scopeId: 'global:global', scopeType: 'global', scopeLabel: 'global' };
     }
@@ -807,7 +937,7 @@ export class EveryTextLineEditor {
         focusProxy.tabIndex = -1;
         this.applySpellCheckToTextArea(focusProxy);
         container.append(focusProxy);
-        const model = monaco.editor.createModel(value, this.currentLanguage.id === 'yaml' ? 'yaml' : this.currentLanguage.id === 'markdown' ? 'markdown' : 'plaintext');
+        const model = monaco.editor.createModel(value, this.getMonacoLanguageId());
         model.updateOptions({
             tabSize: this.indentMode.tabSize,
             insertSpaces: this.indentMode.insertSpaces,
@@ -816,7 +946,7 @@ export class EveryTextLineEditor {
             model,
             readOnly,
             automaticLayout: true,
-            minimap: { enabled: isMonacoMinimapEnabled() },
+            minimap: { enabled: this.isMonacoMinimapEffectivelyEnabled() },
             lineNumbers: 'on',
             scrollBeyondLastLine: false,
             wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
@@ -824,8 +954,12 @@ export class EveryTextLineEditor {
             insertSpaces: this.indentMode.insertSpaces,
             theme: 'vs-dark',
         });
+        this.monacoEditor = monacoEditor;
         this.applySpellCheckToMonaco(container);
+        this.observeMonacoSpellCheck(container);
+        this.setupMonacoSpellchecker(monacoEditor).catch((error) => console.warn(`[${NAME}] Failed to start Monaco spellcheck`, error));
         focusProxy.addEventListener('focus', () => monacoEditor.focus());
+        container.addEventListener('focusin', () => this.applySpellCheckToMonaco(container));
         container.addEventListener('keydown', (event) => this.handleEditorKeyDown(event), { capture: true });
         monacoEditor.onDidChangeModelContent(() => {
             if (!this.selectedSource)
@@ -833,6 +967,7 @@ export class EveryTextLineEditor {
             this.updateDirty(model.getValue() !== this.selectedSource.read());
             this.renderDiff();
             this.updateStatusBar();
+            this.scheduleMonacoSpellcheck();
         });
         monacoEditor.onDidChangeCursorPosition(() => {
             this.updateStatusBar();
@@ -899,6 +1034,9 @@ export class EveryTextLineEditor {
                 return model.getValueInRange(selection).length;
             },
             dispose: () => {
+                this.disposeMonacoSpellcheckers();
+                if (this.monacoEditor === monacoEditor)
+                    this.monacoEditor = null;
                 monacoEditor.dispose();
                 model.dispose();
             },
@@ -1044,9 +1182,15 @@ export class EveryTextLineEditor {
         this.dom.tree.innerHTML = '';
         const groups = new Map();
         for (const source of this.sources) {
-            if (!groups.has(source.group))
-                groups.set(source.group, []);
-            groups.get(source.group).push(source);
+            const treeGroup = this.getTreeGroupForSource(source);
+            if (!groups.has(treeGroup.key)) {
+                groups.set(treeGroup.key, {
+                    label: treeGroup.label,
+                    branchName: treeGroup.branchName,
+                    sources: [],
+                });
+            }
+            groups.get(treeGroup.key)?.sources.push(source);
         }
         if (!groups.size) {
             const empty = document.createElement('div');
@@ -1055,7 +1199,8 @@ export class EveryTextLineEditor {
             this.dom.tree.append(empty);
             return;
         }
-        for (const [group, sources] of groups) {
+        for (const [group, treeGroup] of groups) {
+            const { label, branchName, sources } = treeGroup;
             const section = document.createElement('section');
             section.classList.add('etle--group');
             if (this.collapsedGroups.has(group))
@@ -1064,7 +1209,7 @@ export class EveryTextLineEditor {
             header.type = 'button';
             header.classList.add('etle--groupHeader');
             header.innerHTML = `<span class="fa-solid fa-fw fa-chevron-down"></span><span></span><small></small>`;
-            header.children[1].textContent = group;
+            header.children[1].textContent = label;
             header.children[2].textContent = String(sources.length);
             header.addEventListener('click', () => {
                 if (this.collapsedGroups.has(group))
@@ -1075,7 +1220,6 @@ export class EveryTextLineEditor {
                 this.renderTree();
             });
             section.append(header);
-            const branchName = sources.find(source => source.branchManager)?.branchManager?.getCurrentBranch?.();
             if (branchName) {
                 const branchLine = document.createElement('div');
                 branchLine.classList.add('etle--groupBranch');
@@ -1085,7 +1229,15 @@ export class EveryTextLineEditor {
             }
             const list = document.createElement('div');
             list.classList.add('etle--sourceList');
+            let previousSourceGroup = '';
             for (const source of sources) {
+                if (source.group !== previousSourceGroup) {
+                    previousSourceGroup = source.group;
+                    const subgroup = document.createElement('div');
+                    subgroup.classList.add('etle--sourceSubgroup');
+                    subgroup.textContent = source.group;
+                    list.append(subgroup);
+                }
                 const item = document.createElement('div');
                 item.classList.add('etle--source');
                 item.dataset.sourceId = source.id;
@@ -1116,7 +1268,10 @@ export class EveryTextLineEditor {
                 select.type = 'button';
                 select.classList.add('etle--sourceSelect');
                 select.disabled = source.selectable === false;
-                select.innerHTML = '<span class="fa-solid fa-fw fa-file-lines"></span><span></span>';
+                select.innerHTML = '<span class="etle--sourceLang"></span><span></span>';
+                const lang = this.getLanguageForSource(source);
+                select.children[0].textContent = lang.label;
+                select.children[0].setAttribute('title', `${lang.label} syntax`);
                 select.children[1].textContent = source.label;
                 item.title = source.label;
                 select.addEventListener('click', () => this.selectSource(source.id).catch((error) => console.error(`[${NAME}] Failed to select source`, error)));
@@ -1126,6 +1281,76 @@ export class EveryTextLineEditor {
             section.append(list);
             this.dom.tree.append(section);
         }
+    }
+    getTreeGroupForSource(source) {
+        const branchName = source.branchManager?.getCurrentBranch?.() ?? '';
+        if (!branchName) {
+            return {
+                key: source.group,
+                label: source.group,
+                branchName: '',
+            };
+        }
+        const scopeLabel = this.getTreeBranchScopeLabel(source);
+        return {
+            key: `${scopeLabel}:${branchName}`,
+            label: scopeLabel,
+            branchName,
+        };
+    }
+    getTreeBranchScopeLabel(source) {
+        if (source.group.includes('Chat Completion')
+            || source.group.includes('Utility')
+            || source.group.includes('Formatting')
+            || source.group.includes('Custom OpenAI')) {
+            return 'Chat Completion Preset';
+        }
+        if (source.group.includes('Text Completion'))
+            return 'Text Completion Preset';
+        if (source.group.includes('Power User Context'))
+            return 'Context Template';
+        if (source.group.includes('Power User Instruct'))
+            return 'Instruct Template';
+        if (source.group.includes('System Prompt'))
+            return 'System Prompt Preset';
+        if (source.group.includes('Connection Profiles'))
+            return 'Connection Profile';
+        return source.group;
+    }
+    getLanguageForSource(source) {
+        if (!source)
+            return this.currentLanguage;
+        const stored = this.sourceLanguages[source.id];
+        const storedLanguage = LANGUAGES.find(lang => lang.id === stored);
+        if (storedLanguage)
+            return storedLanguage;
+        return this.guessLanguageForSource(source);
+    }
+    guessLanguageForSource(source) {
+        const jsonLanguage = LANGUAGES.find(lang => lang.id === 'json') ?? LANGUAGES[0];
+        const markdownLanguage = LANGUAGES.find(lang => lang.id === 'markdown') ?? LANGUAGES[0];
+        const textLanguage = LANGUAGES.find(lang => lang.id === 'text') ?? LANGUAGES[0];
+        const id = source.id.toLowerCase();
+        const label = source.label.toLowerCase();
+        if (source.group.includes('Connection Profiles'))
+            return jsonLanguage;
+        if (id.includes('custom_include_body') || id.includes('custom_exclude_body') || id.includes('custom_include_headers'))
+            return jsonLanguage;
+        if (label.includes('json'))
+            return jsonLanguage;
+        if (label.includes('grammar') || label.includes('tokens'))
+            return textLanguage;
+        return markdownLanguage;
+    }
+    setSourceLanguage(source, lang) {
+        const guessed = this.guessLanguageForSource(source);
+        if (lang.id === guessed.id) {
+            delete this.sourceLanguages[source.id];
+        }
+        else {
+            this.sourceLanguages[source.id] = lang.id;
+        }
+        localStorage.setItem(STORAGE.sourceLanguages, JSON.stringify(this.sourceLanguages));
     }
     async toggleSource(source) {
         if (!source?.toggle)
@@ -1163,8 +1388,12 @@ export class EveryTextLineEditor {
         if (this.historyCommit?.sourceId !== source.id)
             this.historyCommit = undefined;
         localStorage.setItem(STORAGE.selectedSource, source.id);
+        this.currentLanguage = this.getLanguageForSource(source);
         this.updateHeader();
         this.editor?.setOptions({ readOnly: !!source.readonly });
+        this.editor?.setOptions({ language: this.currentLanguage.id });
+        this.oldEditor?.setOptions({ language: this.currentLanguage.id });
+        this.setMonacoDiffLanguage();
         this.setEditorValue(source.read());
         this.updateDirty(false);
         this.renderDiff();
@@ -1217,19 +1446,34 @@ export class EveryTextLineEditor {
         this.applySpellCheckToMonaco(this.editor?.scrollContainer);
         this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
         this.editor?.setOptions({ spellCheck: enabled });
+        if (enabled) {
+            this.rebuildMonacoSpellcheckers().catch((error) => console.warn(`[${NAME}] Failed to start Monaco spellcheck`, error));
+        }
+        else {
+            this.disposeMonacoSpellcheckers();
+        }
         this.updateStatusBar();
     }
     setMonacoMinimap(enabled) {
         localStorage.setItem(STORAGE.monacoMinimap, JSON.stringify(enabled));
-        this.editor?.setOptions({ minimap: enabled });
-        this.monacoDiffEditor?.updateOptions?.({ minimap: { enabled } });
-        this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.({ minimap: { enabled } });
-        this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.({ minimap: { enabled } });
+        this.applyMonacoMinimapOption();
         this.updateStatusBar();
         requestAnimationFrame(() => {
             this.editor?.update?.();
             this.layoutMonacoDiff();
         });
+    }
+    isMonacoMinimapEffectivelyEnabled() {
+        return this.editorEngine.id === 'monaco'
+            && isMonacoMinimapEnabled()
+            && !(this.diffOpen && this.dom.root?.classList.contains('etle--monacoDiffMode'));
+    }
+    applyMonacoMinimapOption() {
+        const enabled = this.isMonacoMinimapEffectivelyEnabled();
+        this.editor?.setOptions({ minimap: enabled });
+        this.monacoDiffEditor?.updateOptions?.({ minimap: { enabled } });
+        this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.({ minimap: { enabled } });
+        this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.({ minimap: { enabled } });
     }
     applySpellCheckToTextArea(textarea) {
         if (!textarea)
@@ -1237,11 +1481,105 @@ export class EveryTextLineEditor {
         const enabled = isSpellCheckEnabled();
         textarea.spellcheck = enabled;
         textarea.setAttribute('spellcheck', String(enabled));
+        textarea.setAttribute('autocomplete', enabled ? 'on' : 'off');
+        textarea.setAttribute('autocorrect', enabled ? 'on' : 'off');
+        textarea.setAttribute('autocapitalize', 'sentences');
     }
     applySpellCheckToMonaco(root) {
         if (!root)
             return;
-        root.querySelectorAll('textarea').forEach(textarea => this.applySpellCheckToTextArea(textarea));
+        root.querySelectorAll('textarea, .inputarea').forEach(textarea => this.applySpellCheckToTextArea(textarea));
+    }
+    observeMonacoSpellCheck(root) {
+        if (!root || root.dataset.etleSpellObserver === '1')
+            return;
+        root.dataset.etleSpellObserver = '1';
+        const observer = new MutationObserver(() => this.applySpellCheckToMonaco(root));
+        observer.observe(root, { childList: true, subtree: true });
+    }
+    async setupMonacoSpellchecker(monacoEditor) {
+        if (!isSpellCheckEnabled() || !monacoEditor?.getModel)
+            return;
+        const monaco = globalThis.monaco ?? await loadMonaco();
+        const dictionary = await loadEnglishDictionary();
+        const spellchecker = getSpellchecker(monaco, monacoEditor, {
+            languageSelector: ['markdown', 'plaintext', 'json', 'yaml'],
+            severity: monaco.MarkerSeverity.Info,
+            check: (word) => {
+                const normalized = word.toLowerCase();
+                if (this.shouldIgnoreSpellWord(normalized))
+                    return true;
+                return this.monacoUserDictionary.has(normalized) || dictionary.check(word);
+            },
+            suggest: (word) => dictionary.suggest(word).slice(0, 8),
+            ignore: (word) => {
+                this.monacoIgnoredWords.add(word.toLowerCase());
+                this.scheduleMonacoSpellcheck();
+            },
+            addWord: (word) => {
+                this.monacoUserDictionary.add(word.toLowerCase());
+                this.scheduleMonacoSpellcheck();
+            },
+            tokenize: (line) => this.tokenizeSpellcheckLine(line),
+            messageBuilder: (type, word) => {
+                if (type === 'hover-message')
+                    return `"${word}" may be misspelled.`;
+                if (type === 'ignore')
+                    return `Ignore "${word}"`;
+                if (type === 'add-word')
+                    return `Add "${word}" to this session`;
+                return `Replace with "${word}"`;
+            },
+        });
+        this.monacoSpellcheckers.push(spellchecker);
+        await spellchecker.process();
+    }
+    async rebuildMonacoSpellcheckers() {
+        this.disposeMonacoSpellcheckers();
+        if (!isSpellCheckEnabled())
+            return;
+        await this.setupMonacoSpellchecker(this.monacoEditor);
+        await this.setupMonacoSpellchecker(this.monacoDiffEditor?.getOriginalEditor?.());
+        await this.setupMonacoSpellchecker(this.monacoDiffEditor?.getModifiedEditor?.());
+    }
+    disposeMonacoSpellcheckers() {
+        if (this.monacoSpellcheckFrame !== null) {
+            cancelAnimationFrame(this.monacoSpellcheckFrame);
+            this.monacoSpellcheckFrame = null;
+        }
+        this.monacoSpellcheckers.forEach(spellchecker => spellchecker.dispose());
+        this.monacoSpellcheckers = [];
+    }
+    scheduleMonacoSpellcheck() {
+        if (!isSpellCheckEnabled() || !this.monacoSpellcheckers.length || this.monacoSpellcheckFrame !== null)
+            return;
+        this.monacoSpellcheckFrame = requestAnimationFrame(() => {
+            this.monacoSpellcheckFrame = null;
+            setTimeout(() => {
+                this.monacoSpellcheckers.forEach(spellchecker => spellchecker.process());
+            }, 250);
+        });
+    }
+    *tokenizeSpellcheckLine(line) {
+        const withoutMacros = line.replace(/\{\{[^}]+\}\}/g, match => ' '.repeat(match.length));
+        const matcher = /\b[A-Za-z][A-Za-z']{2,}\b/g;
+        let match;
+        while ((match = matcher.exec(withoutMacros)) !== null) {
+            yield { word: match[0], pos: match.index };
+        }
+    }
+    shouldIgnoreSpellWord(word) {
+        return this.monacoIgnoredWords.has(word)
+            || [
+                'api',
+                'json',
+                'yaml',
+                'npc',
+                'npcs',
+                'stscript',
+                'sysprompt',
+                'user',
+            ].includes(word);
     }
     cycleIndentMode() {
         const index = INDENT_MODES.findIndex(mode => mode.id === this.indentMode.id);
@@ -1265,10 +1603,13 @@ export class EveryTextLineEditor {
     }
     setLanguage(lang) {
         this.currentLanguage = lang;
+        if (this.selectedSource)
+            this.setSourceLanguage(this.selectedSource, lang);
         this.editor?.setOptions({ language: lang.id });
         this.oldEditor?.setOptions({ language: lang.id });
         this.setMonacoDiffLanguage();
         this.updateStatusBar();
+        this.renderTree();
     }
     cycleScrollSync() {
         const index = SYNC_MODES.findIndex(m => m.id === this.scrollSyncMode.id);
@@ -1473,7 +1814,9 @@ export class EveryTextLineEditor {
     updateStatusBar() {
         const wrapEnabled = JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true');
         const spellCheckEnabled = isSpellCheckEnabled();
-        const minimapEnabled = isMonacoMinimapEnabled();
+        const minimapWanted = isMonacoMinimapEnabled();
+        const minimapEnabled = this.isMonacoMinimapEffectivelyEnabled();
+        const minimapForcedOff = this.editorEngine.id === 'monaco' && minimapWanted && !minimapEnabled;
         const stats = this.getEditorStats();
         if (this.dom.statusBranch) {
             const branchManager = this.selectedSource?.branchManager;
@@ -1533,8 +1876,11 @@ export class EveryTextLineEditor {
         }
         if (this.dom.statusMinimap) {
             this.dom.statusMinimap.hidden = this.editorEngine.id !== 'monaco';
-            this.dom.statusMinimap.textContent = minimapEnabled ? 'Map: On' : 'Map: Off';
+            this.dom.statusMinimap.textContent = minimapForcedOff ? 'Map: Off (Diff)' : minimapEnabled ? 'Map: On' : 'Map: Off';
             this.dom.statusMinimap.classList.toggle('etle--statusActive', minimapEnabled);
+            this.dom.statusMinimap.title = minimapForcedOff
+                ? 'Monaco minimap is enabled in settings, but hidden while diff mode is open.'
+                : 'Toggle Monaco minimap';
         }
         if (this.dom.statusLanguage) {
             this.dom.statusLanguage.textContent = this.currentLanguage.label;
@@ -1554,7 +1900,14 @@ export class EveryTextLineEditor {
         this.dom.root?.classList.toggle('etle--syncOff', this.scrollSyncMode.id === 'off');
         this.dom.settingsPanel?.querySelector('[data-setting="wrap"]')?.classList.toggle('etle--activeButton', wrapEnabled);
         this.dom.settingsPanel?.querySelector('[data-setting="spell"]')?.classList.toggle('etle--activeButton', spellCheckEnabled);
-        this.dom.settingsPanel?.querySelector('[data-setting="minimap"]')?.classList.toggle('etle--activeButton', minimapEnabled);
+        const minimapSetting = this.dom.settingsPanel?.querySelector('[data-setting="minimap"]');
+        minimapSetting?.classList.toggle('etle--activeButton', minimapEnabled);
+        if (minimapSetting) {
+            minimapSetting.textContent = minimapForcedOff ? 'Monaco Minimap: Off in Diff' : 'Monaco Minimap';
+            minimapSetting.title = minimapForcedOff
+                ? 'Minimap is saved as on, but disabled while Monaco diff is open.'
+                : 'Toggle Monaco minimap';
+        }
     }
     async apply() {
         await this.saveCurrentSource({ refresh: true, toast: true });
@@ -1594,15 +1947,18 @@ export class EveryTextLineEditor {
         this.dom.diff.classList.toggle('etle--activeButton', this.diffOpen);
         if (this.diffOpen && this.editorEngine.id === 'monaco') {
             this.dom.root.classList.add('etle--monacoDiffMode');
+            this.applyMonacoMinimapOption();
             this.openMonacoDiff().catch((error) => {
                 console.error(`[${NAME}] Failed to open Monaco diff`, error);
                 globalThis.toastr?.error?.('Failed to open Monaco diff. Falling back to Prism diff.');
                 this.dom.root.classList.remove('etle--monacoDiffMode');
+                this.applyMonacoMinimapOption();
                 this.renderDiff();
             });
         }
         else if (!this.diffOpen) {
             this.closeMonacoDiff({ syncValue: true });
+            this.applyMonacoMinimapOption();
             this.renderDiff();
         }
         else {
@@ -1705,20 +2061,24 @@ export class EveryTextLineEditor {
             tabSize: this.indentMode.tabSize,
             insertSpaces: this.indentMode.insertSpaces,
         });
+        this.applyMonacoMinimapOption();
         this.monacoDiffEditor.setModel({
             original: this.monacoDiffOriginalModel,
             modified: this.monacoDiffModifiedModel,
         });
         this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
+        this.observeMonacoSpellCheck(this.dom.monacoDiffHost);
         const modifiedEditor = this.monacoDiffEditor.getModifiedEditor();
         modifiedEditor.onDidChangeModelContent(() => {
             const value = this.monacoDiffModifiedModel.getValue();
             this.editor?.setOptions({ value });
             this.updateDirty(value !== this.selectedSource?.read());
             this.updateStatusBar();
+            this.scheduleMonacoSpellcheck();
         });
         modifiedEditor.onDidChangeCursorPosition(() => this.updateStatusBar());
         modifiedEditor.onDidChangeCursorSelection(() => this.updateStatusBar());
+        this.rebuildMonacoSpellcheckers().catch((error) => console.warn(`[${NAME}] Failed to start Monaco diff spellcheck`, error));
         this.layoutMonacoDiff();
         requestAnimationFrame(() => this.layoutMonacoDiff(true));
     }
@@ -1758,11 +2118,16 @@ export class EveryTextLineEditor {
     closeMonacoDiff({ syncValue = true } = {}) {
         this.disposeMonacoDiff({ syncValue, clearHost: true });
         this.dom.root?.classList.remove('etle--monacoDiffMode');
+        this.applyMonacoMinimapOption();
+        if (isSpellCheckEnabled()) {
+            this.setupMonacoSpellchecker(this.monacoEditor).catch((error) => console.warn(`[${NAME}] Failed to restart Monaco spellcheck`, error));
+        }
     }
     disposeMonacoDiff({ syncValue = true, clearHost = false } = {}) {
         if (syncValue && this.monacoDiffModifiedModel) {
             this.editor?.setOptions({ value: this.monacoDiffModifiedModel.getValue() });
         }
+        this.disposeMonacoSpellcheckers();
         this.monacoDiffEditor?.dispose?.();
         this.monacoDiffOriginalModel?.dispose?.();
         this.monacoDiffModifiedModel?.dispose?.();

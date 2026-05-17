@@ -1,5 +1,7 @@
+import { MonacoSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es.js';
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
+import './vendor/prism-code-editor/grammars/json.js';
 import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
@@ -8,6 +10,7 @@ declare global {
         EveryTextLineEditor?: EveryTextLineEditor;
         monaco?: any;
         require?: any;
+        Typo?: any;
     }
 }
 export declare class EveryTextLineEditor {
@@ -22,6 +25,11 @@ export declare class EveryTextLineEditor {
     editor: PrismEditorLike | null;
     oldEditor: PrismEditorLike | null;
     editorReady: Promise<void>;
+    monacoEditor: any;
+    monacoSpellcheckers: MonacoSpellchecker[];
+    monacoSpellcheckFrame: number | null;
+    monacoUserDictionary: Set<string>;
+    monacoIgnoredWords: Set<string>;
     monacoDiffEditor: any;
     monacoDiffOriginalModel: any;
     monacoDiffModifiedModel: any;
@@ -39,13 +47,17 @@ export declare class EveryTextLineEditor {
     historyStore: HistoryStore;
     historyPanel?: HistoryPanel;
     historyCommit?: HistoryCommit;
+    sourceLanguages: Record<string, string>;
     constructor();
     inject(): Promise<void>;
+    destroy(): void;
     renderDrawer(): void;
     handleDrawerToggle(event: any): void;
     handleDocumentClick(event: any): void;
     renderPanel(): HTMLDivElement;
     createHistoryBatchId(): string;
+    exportHistory(): Promise<void>;
+    clearHistory(): Promise<void>;
     getHistoryScope(source?: TextSource, fallback?: HistoryScope): HistoryScope;
     setSidebarTab(tab: SidebarTab): void;
     setSidebarCollapsed(collapsed: boolean): void;
@@ -70,6 +82,15 @@ export declare class EveryTextLineEditor {
     refreshSources(keepSelection?: boolean): Promise<void>;
     selectInitialSource(): Promise<void>;
     renderTree(): void;
+    getTreeGroupForSource(source: TextSource): {
+        key: string;
+        label: string;
+        branchName: string;
+    };
+    getTreeBranchScopeLabel(source: TextSource): string;
+    getLanguageForSource(source?: TextSource | null): Language;
+    guessLanguageForSource(source: TextSource): Language;
+    setSourceLanguage(source: TextSource, lang: Language): void;
     toggleSource(source: any): Promise<void>;
     selectSource(id: any, { force }?: {
         force?: boolean;
@@ -79,8 +100,20 @@ export declare class EveryTextLineEditor {
     setWordWrap(enabled: any): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
+    isMonacoMinimapEffectivelyEnabled(): boolean;
+    applyMonacoMinimapOption(): void;
     applySpellCheckToTextArea(textarea?: HTMLTextAreaElement | null): void;
     applySpellCheckToMonaco(root?: HTMLElement | null): void;
+    observeMonacoSpellCheck(root?: HTMLElement | null): void;
+    setupMonacoSpellchecker(monacoEditor?: any): Promise<void>;
+    rebuildMonacoSpellcheckers(): Promise<void>;
+    disposeMonacoSpellcheckers(): void;
+    scheduleMonacoSpellcheck(): void;
+    tokenizeSpellcheckLine(line: string): Iterable<{
+        word: string;
+        pos: number;
+    }>;
+    shouldIgnoreSpellWord(word: string): boolean;
     cycleIndentMode(): void;
     cycleLanguage(): void;
     setLanguage(lang: Language): void;
@@ -113,7 +146,7 @@ export declare class EveryTextLineEditor {
     highlightDiff(diff: any): void;
     applyDiffMarks(editor: any, marks: any, activeMark: any): void;
     getCurrentEditorValue(): any;
-    getMonacoLanguageId(): "markdown" | "yaml" | "plaintext";
+    getMonacoLanguageId(): "markdown" | "json" | "yaml" | "plaintext";
     openMonacoDiff(): Promise<void>;
     updateMonacoDiffModels(): void;
     setMonacoDiffLanguage(): void;
