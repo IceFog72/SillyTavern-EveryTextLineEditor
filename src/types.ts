@@ -132,6 +132,8 @@ export interface DomRefs {
     sidebarTabs?: HTMLDivElement;
     sidebarBody?: HTMLDivElement;
     sourcesPanel?: HTMLElement;
+    sourcesToolbar?: HTMLDivElement;
+    addSource?: HTMLButtonElement;
     historyPanel?: HTMLElement;
     settingsPanel?: HTMLElement;
     tree?: HTMLDivElement;
@@ -148,6 +150,12 @@ export interface DomRefs {
     oldEditorHost?: HTMLDivElement;
     editorHost?: HTMLDivElement;
     monacoDiffHost?: HTMLDivElement;
+    oldDiffLabel?: HTMLDivElement;
+    editorDiffLabel?: HTMLDivElement;
+    monacoDiffLabels?: HTMLDivElement;
+    monacoDiffOriginalLabel?: HTMLDivElement;
+    monacoDiffModifiedLabel?: HTMLDivElement;
+    monacoDiffEditorHost?: HTMLDivElement;
     statusDirty?: HTMLElement;
     statusSourceCount?: HTMLElement;
     statusStats?: HTMLElement;

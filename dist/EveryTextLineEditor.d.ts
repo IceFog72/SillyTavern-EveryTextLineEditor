@@ -16,6 +16,7 @@ declare global {
 export declare class EveryTextLineEditor {
     sources: TextSource[];
     selectedSource: TextSource | null;
+    selectedSourceBaseline: string;
     dirty: boolean;
     collapsedGroups: Set<string>;
     currentLanguage: Language;
@@ -48,6 +49,8 @@ export declare class EveryTextLineEditor {
     historyPanel?: HistoryPanel;
     historyCommit?: HistoryCommit;
     sourceLanguages: Record<string, string>;
+    suppressEditorChange: boolean;
+    trackedSourceGroups: Set<string>;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -82,6 +85,12 @@ export declare class EveryTextLineEditor {
     refreshSources(keepSelection?: boolean): Promise<void>;
     selectInitialSource(): Promise<void>;
     renderTree(): void;
+    getTrackedSources(): TextSource[];
+    persistTrackedSources(): void;
+    pruneTrackedSources(): void;
+    setTrackedSourceGroups(groups: string[]): Promise<void>;
+    clearSelectedSource(title: string, detail: string): void;
+    openSourceControlDialog(): void;
     getTreeGroupForSource(source: TextSource): {
         key: string;
         label: string;
@@ -95,13 +104,17 @@ export declare class EveryTextLineEditor {
     selectSource(id: any, { force }?: {
         force?: boolean;
     }): Promise<void>;
-    confirmUnsavedSourceChange(action?: string): Promise<"save" | "discard" | "cancel">;
+    confirmUnsavedSourceChange(action?: string): Promise<"cancel" | "save" | "discard">;
     setEditorValue(value: any): void;
+    withSuppressedEditorChange(callback: () => void): void;
+    isValueDirty(value: any): boolean;
+    isCurrentEditorDirty(): boolean;
     setWordWrap(enabled: any): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
     isMonacoMinimapEffectivelyEnabled(): boolean;
     applyMonacoMinimapOption(): void;
+    applyMonacoDiffWordWrapOption(): void;
     applySpellCheckToTextArea(textarea?: HTMLTextAreaElement | null): void;
     applySpellCheckToMonaco(root?: HTMLElement | null): void;
     observeMonacoSpellCheck(root?: HTMLElement | null): void;
@@ -143,6 +156,11 @@ export declare class EveryTextLineEditor {
     updateMasterScrollbarHeight(): void;
     renderDiff(): void;
     getDiffOriginalValue(): string;
+    getDiffSideLabels(): {
+        left: string;
+        right: string;
+    };
+    updateDiffSideLabels(): void;
     highlightDiff(diff: any): void;
     applyDiffMarks(editor: any, marks: any, activeMark: any): void;
     getCurrentEditorValue(): any;

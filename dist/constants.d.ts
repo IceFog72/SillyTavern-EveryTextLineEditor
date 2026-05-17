@@ -11,6 +11,7 @@ export declare const STORAGE: {
     scrollSync: string;
     editorEngine: string;
     sourceLanguages: string;
+    trackedSources: string;
 };
 export declare const DB: {
     readonly NAME: `${string}:history`;

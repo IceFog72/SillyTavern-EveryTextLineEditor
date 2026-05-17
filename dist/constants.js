@@ -13,6 +13,7 @@ export const STORAGE = {
     scrollSync: `${NAME}:scrollSync`,
     editorEngine: `${NAME}:editorEngine`,
     sourceLanguages: `${NAME}:sourceLanguages`,
+    trackedSources: `${NAME}:trackedSources`,
 };
 export const DB = {
     NAME: `${NAME}:history`,
