@@ -1055,6 +1055,12 @@
     background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
 }
 
+.etle--sourceDialogPinnedRow {
+    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 70%, transparent);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent);
+    font-weight: 600;
+}
+
 .etle--sourceDialogRow span {
     min-width: 0;
     overflow: hidden;

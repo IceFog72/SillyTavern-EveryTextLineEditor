@@ -55,6 +55,8 @@ export declare class EveryTextLineEditor {
     trackedSourceGroups: Set<string>;
     sourceWatchTimer: number | null;
     sourceWatchInFlight: boolean;
+    runtimeSourceRefreshTimer: number | null;
+    sourceEventHandlers: Array<[string, (...args: any[]) => void]>;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -87,6 +89,10 @@ export declare class EveryTextLineEditor {
     syncDiffScroll(): void;
     scheduleDiffScrollSync(): void;
     refreshSources(keepSelection?: boolean): Promise<void>;
+    startSourceEventListeners(): void;
+    stopSourceEventListeners(): void;
+    scheduleRuntimeSourceRefresh(): void;
+    refreshSourcesFromRuntime(): Promise<void>;
     selectInitialSource(): Promise<void>;
     renderTree(): void;
     getTrackedSources(): TextSource[];
@@ -94,7 +100,7 @@ export declare class EveryTextLineEditor {
     pruneTrackedSources(): void;
     setTrackedSourceGroups(groups: string[]): Promise<void>;
     clearSelectedSource(title: string, detail: string): void;
-    openSourceControlDialog(): void;
+    openSourceControlDialog(): Promise<void>;
     getLanguageForSource(source?: TextSource | null): Language;
     guessLanguageForSource(source: TextSource): Language;
     setSourceLanguage(source: TextSource, lang: Language): void;
@@ -113,6 +119,8 @@ export declare class EveryTextLineEditor {
     setWordWrap(enabled: any): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
+    setIgnoreFullJsonHistory(enabled: boolean): void;
+    isSourceIgnoredForHistory(source?: TextSource | null): boolean;
     isMonacoMinimapEffectivelyEnabled(): boolean;
     applyMonacoMinimapOption(): void;
     applyMonacoDiffWordWrapOption(): void;

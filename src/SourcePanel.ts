@@ -3,8 +3,8 @@ import { setCollapsedGroups } from './SourceManager.js';
 import { DomRefs, Language, TextSource } from './types.js';
 
 export const isLorebookGroup = (group: string): boolean => group.startsWith('World/Lorebook: ');
-export const isCardGroup = (group: string): boolean => group.startsWith('Character Card: ');
-const getCardName = (group: string): string => group.replace(/^Character Card: /, '');
+export const isCardGroup = (group: string): boolean => group === 'Current Card' || group.startsWith('Character Card: ');
+const getCardName = (group: string): string => group === 'Current Card' ? 'Current Card' : group.replace(/^Character Card: /, '');
 
 const getLorebookName = (group: string): string => group.replace(/^World\/Lorebook: /, '');
 
@@ -136,7 +136,8 @@ export function openSourceControlDialog(host: SourcePanelHost) {
         const cards = availableGroups.filter(([group]) => isCardGroup(group));
         appendSourceControlColumn(host, columns, 'Categories', categories, (group, count) => `${group} (${count})`, false, () => applySourceControlFilters(dialog, showOnlySelected));
         appendSourceControlColumn(host, columns, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected));
-        appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected));
+        appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected), cards.some(([group]) => group === 'Current Card') ? ['Current Card'] : []);
+        applySourceControlFilters(dialog, showOnlySelected);
     }
 
     const actions = document.createElement('div');
@@ -167,7 +168,9 @@ function renderSourceList(host: SourcePanelHost, sources: TextSource[]) {
             previousSourceGroup = source.group;
             const subgroup = document.createElement('div');
             subgroup.classList.add('etle--sourceSubgroup');
-            subgroup.textContent = source.group;
+            subgroup.textContent = source.group === 'Current Card'
+                ? source.displayGroup ?? source.group
+                : source.group;
             list.append(subgroup);
         }
         list.append(renderSourceRow(host, source));
@@ -223,6 +226,7 @@ function appendSourceControlColumn(
     formatLabel: (group: string, count: number) => string,
     searchable = false,
     onFilter?: () => void,
+    pinnedGroups: string[] = [],
 ) {
     const column = document.createElement('section');
     column.classList.add('etle--sourceDialogColumn');
@@ -230,6 +234,11 @@ function appendSourceControlColumn(
     groupTitle.classList.add('etle--sourceDialogGroup');
     groupTitle.textContent = title;
     column.append(groupTitle);
+    const pinnedSet = new Set(pinnedGroups);
+    const pinnedRows = groups.filter(([group]) => pinnedSet.has(group));
+    for (const [group, count] of pinnedRows) {
+        column.append(renderSourceControlRow(host, group, count, (itemGroup, itemCount) => `Current Card: ${getCardName(itemGroup)} (${itemCount})`, true));
+    }
     if (searchable) {
         const search = document.createElement('input');
         search.type = 'search';
@@ -247,19 +256,31 @@ function appendSourceControlColumn(
         return;
     }
     for (const [group, count] of groups) {
-        const row = document.createElement('label');
-        row.classList.add('etle--sourceDialogRow');
-        row.dataset.filterText = `${group} ${formatLabel(group, count)}`.toLowerCase();
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = group;
-        checkbox.checked = host.trackedSourceGroups.has(group);
-        const text = document.createElement('span');
-        text.textContent = formatLabel(group, count);
-        row.append(checkbox, text);
-        column.append(row);
+        if (pinnedSet.has(group)) continue;
+        column.append(renderSourceControlRow(host, group, count, formatLabel));
     }
     columns.append(column);
+}
+
+function renderSourceControlRow(
+    host: SourcePanelHost,
+    group: string,
+    count: number,
+    formatLabel: (group: string, count: number) => string,
+    pinned = false,
+) {
+    const row = document.createElement('label');
+    row.classList.add('etle--sourceDialogRow');
+    if (pinned) row.classList.add('etle--sourceDialogPinnedRow');
+    row.dataset.filterText = `${group} ${formatLabel(group, count)}`.toLowerCase();
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = group;
+    checkbox.checked = host.trackedSourceGroups.has(group);
+    const text = document.createElement('span');
+    text.textContent = formatLabel(group, count);
+    row.append(checkbox, text);
+    return row;
 }
 
 function applySourceControlFilters(dialog: HTMLDialogElement, showOnlySelected: boolean) {
@@ -269,7 +290,8 @@ function applySourceControlFilters(dialog: HTMLDialogElement, showOnlySelected: 
 
         column.querySelectorAll<HTMLElement>('.etle--sourceDialogRow').forEach(row => {
             const checkbox = row.querySelector<HTMLInputElement>('input[type="checkbox"]');
-            const matchesSearch = !query || String(row.dataset.filterText ?? '').includes(query);
+            const isPinned = row.classList.contains('etle--sourceDialogPinnedRow');
+            const matchesSearch = isPinned || !query || String(row.dataset.filterText ?? '').includes(query);
             const matchesSelected = !showOnlySelected || !!checkbox?.checked;
             const show = matchesSearch && matchesSelected;
             row.hidden = !show;

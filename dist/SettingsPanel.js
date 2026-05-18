@@ -1,6 +1,7 @@
 import { EDITOR_ENGINES, INDENT_MODES, NAME, STORAGE, SYNC_MODES } from './constants.js';
 const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
 const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
+const isFullJsonHistoryIgnored = () => JSON.parse(localStorage.getItem(STORAGE.ignoreFullJsonHistory) || 'true');
 export function renderSettingsPanel(host) {
     const settingsPanel = document.createElement('section');
     host.dom.settingsPanel = settingsPanel;
@@ -84,6 +85,8 @@ function renderHistorySettings(host) {
     historyGroup.append(historyGrid);
     const historyActions = document.createElement('div');
     historyActions.classList.add('etle--settingsButtonRow');
+    const ignoreJsonBtn = host.makeTextButton('Ignore Full JSON', 'fa-code', () => host.setIgnoreFullJsonHistory(!isFullJsonHistoryIgnored()));
+    ignoreJsonBtn.dataset.setting = 'ignoreFullJsonHistory';
     const exportBtn = host.makeTextButton('Export History', 'fa-file-export', () => host.exportHistory().catch(error => {
         console.error(`[${NAME}] Failed to export history`, error);
         globalThis.toastr?.error?.('Failed to export history. See console for details.');
@@ -93,7 +96,7 @@ function renderHistorySettings(host) {
         globalThis.toastr?.error?.('Failed to clear history. See console for details.');
     }));
     clearBtn.classList.add('redWarningBG');
-    historyActions.append(exportBtn, clearBtn);
+    historyActions.append(ignoreJsonBtn, exportBtn, clearBtn);
     historyGroup.append(historyActions);
     return historyGroup;
 }

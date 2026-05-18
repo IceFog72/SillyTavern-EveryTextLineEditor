@@ -15,7 +15,7 @@ import { textgenerationwebui_preset_names, textgenerationwebui_settings } from '
 // @ts-ignore
 import { extension_settings } from '../../../../extensions.js';
 // @ts-ignore
-import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCharactersDebounced, saveSettingsDebounced } from '../../../../../script.js';
+import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCharactersDebounced, saveSettingsDebounced, this_chid } from '../../../../../script.js';
 import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
@@ -34,6 +34,8 @@ const GROUP_ORDER: Record<string, number> = {
     'Personas': 110,
     'Character Cards': 120,
 };
+
+const JSON_SOURCE_ORDER = 1_000_000;
 
 export const getCollapsedGroups = (): Set<string> => {
     try {
@@ -70,6 +72,21 @@ const parsePromptInjectionTriggers = (value: string): string[] => (
         .map(trigger => trigger.trim().toLowerCase())
         .filter(trigger => GENERATION_TRIGGER_IDS.has(trigger))
 );
+
+const parseJsonObject = (value: string, label: string): Record<string, any> => {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error(`${label} must be a JSON object.`);
+    }
+    return parsed;
+};
+
+const replaceObjectContents = (target: Record<string, any>, source: Record<string, any>) => {
+    for (const key of Object.keys(target)) delete target[key];
+    Object.assign(target, source);
+};
+
+const normalizePromptContent = (value: unknown): string => String(value ?? '').trim().replace(/\r\n/g, '\n');
 
 export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
     const oldLines = splitLines(oldText);
@@ -264,12 +281,10 @@ const makeThemeJsonSource = (): TextSource => {
         order: 5,
         readonly: false,
         branchManager,
+        excludeFromHistory: true,
         read: () => JSON.stringify(getThemeObject(themeName), null, 2),
         write: (value) => {
-            const parsed = JSON.parse(value);
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                throw new Error('Theme JSON must be an object.');
-            }
+            const parsed = parseJsonObject(value, 'Theme JSON');
             if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
                 throw new Error('Theme JSON must include a non-empty "name".');
             }
@@ -442,6 +457,43 @@ const makeTextGenFieldSource = (property: string, label: string): TextSource => 
     };
 };
 
+const makeObjectJsonSource = ({
+    id,
+    label,
+    group,
+    object,
+    save,
+    groupOrder,
+    order = 0,
+    branchManager,
+    meta,
+}: {
+    id: string;
+    label: string;
+    group: string;
+    object: Record<string, any>;
+    save: () => void | Promise<void>;
+    groupOrder?: number;
+    order?: number;
+    branchManager?: BranchManager;
+    meta?: string;
+}): TextSource => ({
+    id,
+    label,
+    group,
+    groupOrder,
+    order,
+    readonly: false,
+    branchManager,
+    excludeFromHistory: true,
+    read: () => JSON.stringify(object, null, 2),
+    write: (value) => {
+        replaceObjectContents(object, parseJsonObject(value, label));
+    },
+    save,
+    meta,
+});
+
 const getConnectionManagerProfiles = (): Record<string, any>[] => {
     const profiles = extension_settings?.connectionManager?.profiles;
     return Array.isArray(profiles) ? profiles : [];
@@ -456,11 +508,21 @@ const getCharacterByAvatar = (avatar: string): Record<string, any> | null => (
     (characters || []).find((character: any) => character?.avatar === avatar) ?? null
 );
 
+const getCurrentCharacter = (): Record<string, any> | null => (
+    this_chid !== undefined ? characters?.[this_chid] ?? null : null
+);
+
 const getFreshCharacter = async (avatar: string): Promise<Record<string, any>> => {
     await getOneCharacter?.(avatar);
     const character = getCharacterByAvatar(avatar);
     if (!character) throw new Error(`Character "${avatar}" was not found.`);
     return character;
+};
+
+const getFreshCurrentCharacter = async (): Promise<Record<string, any>> => {
+    const character = getCurrentCharacter();
+    if (!character?.avatar) throw new Error('No current character is selected.');
+    return getFreshCharacter(String(character.avatar));
 };
 
 const makeCharacterFormData = (character: Record<string, any>) => {
@@ -523,13 +585,23 @@ const CHARACTER_CARD_FIELDS = [
     { key: 'tags', label: 'Tags to Embed', get: (card: Record<string, any>) => Array.isArray(card.data?.tags ?? card.tags) ? (card.data?.tags ?? card.tags).join(', ') : card.data?.tags ?? card.tags, set: (card: Record<string, any>, value: string) => { const tags = value.split(',').map(tag => tag.trim()).filter(Boolean); card.tags = tags; (card.data ??= {}).tags = tags; } },
 ] as const;
 
-const makeCharacterCardSources = (character: Record<string, any>): TextSource[] => {
+const makeCharacterCardSources = (character: Record<string, any>, {
+    group,
+    idPrefix,
+    refreshCharacter,
+}: {
+    group?: string;
+    idPrefix?: string;
+    refreshCharacter?: () => Promise<Record<string, any>>;
+} = {}): TextSource[] => {
     const avatar = String(character.avatar ?? character.name ?? '');
     let activeCharacter = character;
     const cardName = String(character.name ?? character.data?.name ?? avatar);
-    const group = `Character Card: ${cardName}`;
+    const sourceGroup = group ?? `Character Card: ${cardName}`;
+    const displayGroup = sourceGroup === 'Current Card' ? cardName : undefined;
+    const sourceIdPrefix = idPrefix ?? `character-card:${avatar}`;
     const refresh = async () => {
-        activeCharacter = await getFreshCharacter(avatar);
+        activeCharacter = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
         return activeCharacter;
     };
     const save = async () => {
@@ -538,9 +610,9 @@ const makeCharacterCardSources = (character: Record<string, any>): TextSource[] 
     };
 
     const sources = CHARACTER_CARD_FIELDS.map((field, index): TextSource => ({
-        id: `character-card:${avatar}:${field.key}`,
+        id: `${sourceIdPrefix}:${field.key}`,
         label: field.label,
-        group,
+        group: sourceGroup,
         groupOrder: GROUP_ORDER['Character Cards'],
         order: index,
         readonly: false,
@@ -550,30 +622,46 @@ const makeCharacterCardSources = (character: Record<string, any>): TextSource[] 
             field.set(activeCharacter, value);
         },
         save,
-        meta: `Character card: ${avatar}`,
+        meta: `Character card: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
+        displayGroup,
     }));
 
     sources.push({
-        id: `character-card:${avatar}:json`,
+        id: `${sourceIdPrefix}:json`,
         label: 'Full JSON',
-        group,
+        group: sourceGroup,
         groupOrder: GROUP_ORDER['Character Cards'],
-        order: 999,
+        order: JSON_SOURCE_ORDER,
         readonly: false,
+        excludeFromHistory: true,
         read: () => JSON.stringify(activeCharacter, null, 2),
         readFresh: async () => JSON.stringify(await refresh(), null, 2),
         write: (value) => {
-            const parsed = JSON.parse(value);
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Character card must be a JSON object.');
+            const parsed = parseJsonObject(value, 'Character card');
             if (!parsed.avatar) parsed.avatar = avatar;
             activeCharacter = parsed;
         },
         save,
-        meta: `Character card JSON: ${avatar}`,
+        meta: `Character card JSON: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
+        displayGroup,
     });
 
     return sources;
 };
+
+const makeCurrentCharacterPlaceholderSource = (): TextSource => ({
+    id: 'current-character-card:placeholder',
+    label: 'No current character selected',
+    group: 'Current Card',
+    groupOrder: GROUP_ORDER['Character Cards'],
+    readonly: true,
+    selectable: false,
+    placeholder: true,
+    read: () => '',
+    write: () => {},
+    save: () => {},
+    meta: 'Current character card is unavailable until a character is selected.',
+});
 
 const makeConnectionProfileSource = (profile: Record<string, any>): TextSource => {
     const branchManager = getBranchManager('Connection Profiles');
@@ -586,14 +674,11 @@ const makeConnectionProfileSource = (profile: Record<string, any>): TextSource =
         groupOrder: GROUP_ORDER['Connection Profiles'],
         readonly: false,
         branchManager,
+        excludeFromHistory: true,
         read: () => JSON.stringify(profile, null, 2),
         write: (value) => {
-            const parsed = JSON.parse(value);
-            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-                throw new Error('Connection profile must be a JSON object.');
-            }
-            for (const key of Object.keys(profile)) delete profile[key];
-            Object.assign(profile, parsed);
+            const parsed = parseJsonObject(value, 'Connection profile');
+            replaceObjectContents(profile, parsed);
         },
         save: () => saveSettingsDebounced(),
         meta: 'Connection Manager profile JSON',
@@ -729,11 +814,27 @@ export const getSources = async (): Promise<TextSource[]> => {
         const branchManager = getBranchManager('Chat Completion Prompts');
         const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
 
+        sources.push(makeObjectJsonSource({
+            id: `prompt-manager:service-settings${branchSuffix}`,
+            label: 'Full JSON',
+            group: 'Chat Completion Prompts',
+            groupOrder: GROUP_ORDER['Chat Completion Prompts'],
+            order: JSON_SOURCE_ORDER,
+            object: promptManager.serviceSettings,
+            branchManager,
+            save: async () => {
+                await promptManager.saveServiceSettings?.();
+                promptManager.render?.(false);
+            },
+            meta: 'Chat completion preset JSON',
+        }));
+
         const activeOrder = promptManager.activeCharacter
             ? promptManager.getPromptOrderForCharacter(promptManager.activeCharacter)
             : [];
         const enabledById = new Map(activeOrder.map((entry, index) => [entry.identifier, { enabled: !!entry.enabled, index }]));
         const promptById = new Map<string, any>(promptManager.serviceSettings.prompts.map(prompt => [prompt?.identifier, prompt]));
+        const orderedPromptContents = new Set<string>();
         const addPromptSource = (prompt, index, state) => {
             const orderLabel = state ? ` #${state.index + 1}` : '';
             const enabledLabel = state ? (state.enabled ? ' enabled' : ' disabled') : '';
@@ -831,6 +932,8 @@ export const getSources = async (): Promise<TextSource[]> => {
             const prompt = promptById.get(entry.identifier);
             const state = { enabled: !!entry.enabled, index, entry };
             if (prompt && typeof prompt.content === 'string') {
+                const normalizedContent = normalizePromptContent(prompt.content);
+                if (normalizedContent) orderedPromptContents.add(normalizedContent);
                 addPromptSource(prompt, index, state);
                 return;
             }
@@ -867,11 +970,28 @@ export const getSources = async (): Promise<TextSource[]> => {
 
         promptManager.serviceSettings.prompts.forEach((prompt, index) => {
             if (!prompt || typeof prompt.content !== 'string' || enabledById.has(prompt.identifier)) return;
+            const normalizedContent = normalizePromptContent(prompt.content);
+            if (normalizedContent && orderedPromptContents.has(normalizedContent)) return;
             addPromptSource(prompt, index, null);
         });
     }
 
     if (oai_settings) {
+        const branchManager = getBranchManager('Custom OpenAI Parameters');
+        const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
+        sources.push(makeObjectJsonSource({
+            id: `oai_settings:json${branchSuffix}`,
+            label: 'OpenAI Settings JSON',
+            group: 'Custom OpenAI Parameters',
+            groupOrder: GROUP_ORDER['Custom OpenAI Parameters'],
+            order: JSON_SOURCE_ORDER,
+            object: oai_settings,
+            branchManager,
+            save: () => saveSettingsDebounced(),
+            meta: 'OpenAI/chat completion settings JSON',
+        }));
+
         for (const [property, label, selector] of TEXT_FIELDS.utility) {
             if (typeof oai_settings[property] !== 'string') continue;
             sources.push(makeObjectFieldSource({
@@ -909,6 +1029,21 @@ export const getSources = async (): Promise<TextSource[]> => {
     }
 
     if (textgenerationwebui_settings) {
+        const branchManager = getBranchManager('Text Completion Parameters');
+        const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
+        sources.push(makeObjectJsonSource({
+            id: `textgenerationwebui_settings:json${branchSuffix}`,
+            label: 'Full JSON',
+            group: 'Text Completion Parameters',
+            groupOrder: GROUP_ORDER['Text Completion Parameters'],
+            order: JSON_SOURCE_ORDER,
+            object: textgenerationwebui_settings,
+            branchManager,
+            save: saveTextGenPreset,
+            meta: textgenerationwebui_settings?.preset ? `Text Completion preset JSON: ${textgenerationwebui_settings.preset}` : 'Text Completion preset JSON',
+        }));
+
         for (const [property, label] of TEXT_FIELDS.textgen) {
             if (!(property in textgenerationwebui_settings)) continue;
             sources.push(makeTextGenFieldSource(property, label));
@@ -916,6 +1051,21 @@ export const getSources = async (): Promise<TextSource[]> => {
     }
 
     if (power_user?.context) {
+        const branchManager = getBranchManager('Power User Context');
+        const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
+        sources.push(makeObjectJsonSource({
+            id: `power_user.context:json${branchSuffix}`,
+            label: 'Full JSON',
+            group: 'Power User Context',
+            groupOrder: GROUP_ORDER['Power User Context'],
+            order: JSON_SOURCE_ORDER,
+            object: power_user.context,
+            branchManager,
+            save: () => saveSettingsDebounced(),
+            meta: power_user?.context?.preset ? `Context template JSON: ${power_user.context.preset}` : 'Context template JSON',
+        }));
+
         for (const [property, label] of TEXT_FIELDS.context) {
             sources.push(makeObjectFieldSource({
                 id: `power_user.context:${property}`,
@@ -929,12 +1079,42 @@ export const getSources = async (): Promise<TextSource[]> => {
     }
 
     if (power_user?.instruct) {
+        const branchManager = getBranchManager('Power User Instruct');
+        const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
+        sources.push(makeObjectJsonSource({
+            id: `power_user.instruct:json${branchSuffix}`,
+            label: 'Full JSON',
+            group: 'Power User Instruct',
+            groupOrder: GROUP_ORDER['Power User Instruct'],
+            order: JSON_SOURCE_ORDER,
+            object: power_user.instruct,
+            branchManager,
+            save: saveInstructPreset,
+            meta: power_user?.instruct?.preset ? `Instruct template JSON: ${power_user.instruct.preset}` : 'Instruct template JSON',
+        }));
+
         for (const [property, label] of TEXT_FIELDS.instruct) {
             sources.push(makeInstructFieldSource(property, label));
         }
     }
 
     if (power_user?.sysprompt) {
+        const branchManager = getBranchManager('System Prompt');
+        const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
+
+        sources.push(makeObjectJsonSource({
+            id: `power_user.sysprompt:json${branchSuffix}`,
+            label: 'Full JSON',
+            group: 'System Prompt',
+            groupOrder: GROUP_ORDER['System Prompt'],
+            order: JSON_SOURCE_ORDER,
+            object: power_user.sysprompt,
+            branchManager,
+            save: saveSystemPromptPreset,
+            meta: power_user?.sysprompt?.name ? `System prompt preset JSON: ${power_user.sysprompt.name}` : 'System prompt preset JSON',
+        }));
+
         for (const [property, label] of TEXT_FIELDS.sysprompt) {
             sources.push(makeSystemPromptFieldSource(property, label));
         }
@@ -957,6 +1137,17 @@ export const getSources = async (): Promise<TextSource[]> => {
     }
 
     if (power_user?.persona_descriptions && typeof power_user.persona_descriptions === 'object') {
+        sources.push(makeObjectJsonSource({
+            id: 'power_user.persona_descriptions:json',
+            label: 'Persona Descriptions JSON',
+            group: 'Personas',
+            groupOrder: GROUP_ORDER['Personas'],
+            order: JSON_SOURCE_ORDER,
+            object: power_user.persona_descriptions,
+            save: () => saveSettingsDebounced(),
+            meta: 'Persona descriptions JSON',
+        }));
+
         for (const [key, value] of Object.entries(power_user.persona_descriptions) as Array<[string, any]>) {
             if (!value || typeof value.description !== 'string') continue;
             sources.push({
@@ -978,6 +1169,16 @@ export const getSources = async (): Promise<TextSource[]> => {
     }
 
     if (Array.isArray(characters) && characters.length) {
+        const currentCharacter = getCurrentCharacter();
+        if (currentCharacter?.avatar) {
+            sources.push(...makeCharacterCardSources(currentCharacter, {
+                group: 'Current Card',
+                idPrefix: 'current-character-card',
+                refreshCharacter: getFreshCurrentCharacter,
+            }));
+        } else {
+            sources.push(makeCurrentCharacterPlaceholderSource());
+        }
         for (const character of characters) {
             if (!character?.avatar) continue;
             sources.push(...makeCharacterCardSources(character));
@@ -993,6 +1194,30 @@ export const getSources = async (): Promise<TextSource[]> => {
                 console.warn(`[${NAME}] Could not load world info "${worldName}"`, error);
                 continue;
             }
+            let activeWorldData = data;
+            const refreshWorld = async () => {
+                activeWorldData = await loadWorldInfo(worldName);
+                return activeWorldData;
+            };
+            sources.push({
+                id: `world:${worldName}:json`,
+                label: 'Full JSON',
+                group: `World/Lorebook: ${worldName}`,
+                order: JSON_SOURCE_ORDER,
+                readonly: false,
+                excludeFromHistory: true,
+                read: () => JSON.stringify(activeWorldData, null, 2),
+                readFresh: async () => JSON.stringify(await refreshWorld(), null, 2),
+                write: (value) => {
+                    activeWorldData = parseJsonObject(value, 'Lorebook');
+                },
+                save: async () => {
+                    await saveWorldInfo(worldName, activeWorldData, true);
+                    reloadEditor(worldName, true);
+                },
+                meta: `Lorebook JSON: ${worldName}`,
+            });
+
             const entries = Array.isArray(data?.entries)
                 ? data.entries.map((entry: any) => [entry?.uid, entry] as const)
                 : Object.entries(data?.entries ?? {});

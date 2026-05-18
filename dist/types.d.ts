@@ -68,11 +68,13 @@ export interface TextSource {
     id: string;
     label: string;
     group: string;
+    displayGroup?: string;
     groupOrder?: number;
     order?: number;
     readonly: boolean;
     selectable?: boolean;
     placeholder?: boolean;
+    excludeFromHistory?: boolean;
     enabled?: boolean;
     toggleable?: boolean;
     promptOrderEntry?: PromptOrderEntry;

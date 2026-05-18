@@ -9,6 +9,7 @@ export interface SettingsPanelHost {
     setWordWrap(enabled: boolean): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
+    setIgnoreFullJsonHistory(enabled: boolean): void;
     setEditorEngine(engine: EditorEngine): Promise<void>;
     setScrollSync(mode: SyncMode): void;
     setIndentMode(mode: IndentMode): void;

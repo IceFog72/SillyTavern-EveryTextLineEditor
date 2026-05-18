@@ -15,6 +15,7 @@ export const STORAGE = {
     editorEngine: `${NAME}:editorEngine`,
     sourceLanguages: `${NAME}:sourceLanguages`,
     trackedSources: `${NAME}:trackedSources`,
+    ignoreFullJsonHistory: `${NAME}:ignoreFullJsonHistory`,
 };
 
 export const DB = {

@@ -12,6 +12,7 @@ export declare const STORAGE: {
     editorEngine: string;
     sourceLanguages: string;
     trackedSources: string;
+    ignoreFullJsonHistory: string;
 };
 export declare const DB: {
     readonly NAME: `${string}:history`;

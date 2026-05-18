@@ -3,6 +3,7 @@ import { DomRefs, EditorEngine, IndentMode, SyncMode } from './types.js';
 
 const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
 const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
+const isFullJsonHistoryIgnored = () => JSON.parse(localStorage.getItem(STORAGE.ignoreFullJsonHistory) || 'true');
 
 export interface SettingsPanelHost {
     dom: DomRefs;
@@ -14,6 +15,7 @@ export interface SettingsPanelHost {
     setWordWrap(enabled: boolean): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
+    setIgnoreFullJsonHistory(enabled: boolean): void;
     setEditorEngine(engine: EditorEngine): Promise<void>;
     setScrollSync(mode: SyncMode): void;
     setIndentMode(mode: IndentMode): void;
@@ -123,6 +125,8 @@ function renderHistorySettings(host: SettingsPanelHost): HTMLElement {
 
     const historyActions = document.createElement('div');
     historyActions.classList.add('etle--settingsButtonRow');
+    const ignoreJsonBtn = host.makeTextButton('Ignore Full JSON', 'fa-code', () => host.setIgnoreFullJsonHistory(!isFullJsonHistoryIgnored()));
+    ignoreJsonBtn.dataset.setting = 'ignoreFullJsonHistory';
     const exportBtn = host.makeTextButton('Export History', 'fa-file-export', () => host.exportHistory().catch(error => {
         console.error(`[${NAME}] Failed to export history`, error);
         globalThis.toastr?.error?.('Failed to export history. See console for details.');
@@ -132,7 +136,7 @@ function renderHistorySettings(host: SettingsPanelHost): HTMLElement {
         globalThis.toastr?.error?.('Failed to clear history. See console for details.');
     }));
     clearBtn.classList.add('redWarningBG');
-    historyActions.append(exportBtn, clearBtn);
+    historyActions.append(ignoreJsonBtn, exportBtn, clearBtn);
     historyGroup.append(historyActions);
     return historyGroup;
 }

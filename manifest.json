@@ -4,7 +4,7 @@
     "js": "dist/index.js",
     "css": "style.css",
     "author": "IceFog72",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "homePage": "https://github.com/IceFog72/SillyTavern-EveryTextLineEditor/",
     "auto_update": true,
     "minimum_client_version": "1.12.0",

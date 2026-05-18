@@ -4,6 +4,8 @@ import { setSlashCommandAutoComplete } from '../../../../slash-commands.js';
 import { Popup, POPUP_RESULT } from '../../../../popup.js';
 // @ts-ignore
 import { download } from '../../../../utils.js';
+// @ts-ignore
+import { eventSource, event_types } from '../../../../../script.js';
 import { createEditor, languageMap, Prism } from './vendor/prism-code-editor/index.js';
 import { defaultCommands } from './vendor/prism-code-editor/extensions/commands.js';
 import { indentGuides } from './vendor/prism-code-editor/extensions/guides.js';
@@ -41,6 +43,7 @@ const getEditorEngine = (): EditorEngine => {
 
 const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
 const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
+const isFullJsonHistoryIgnored = () => JSON.parse(localStorage.getItem(STORAGE.ignoreFullJsonHistory) || 'true');
 const getStoredSourceLanguages = (): Record<string, string> => {
     try {
         const stored = JSON.parse(localStorage.getItem(STORAGE.sourceLanguages) || '{}');
@@ -185,6 +188,8 @@ export class EveryTextLineEditor {
     trackedSourceGroups: Set<string>;
     sourceWatchTimer: number | null;
     sourceWatchInFlight: boolean;
+    runtimeSourceRefreshTimer: number | null;
+    sourceEventHandlers: Array<[string, (...args: any[]) => void]>;
 
     constructor() {
         this.sources = [];
@@ -220,6 +225,8 @@ export class EveryTextLineEditor {
         this.trackedSourceGroups = new Set(getTrackedSourceGroups());
         this.sourceWatchTimer = null;
         this.sourceWatchInFlight = false;
+        this.runtimeSourceRefreshTimer = null;
+        this.sourceEventHandlers = [];
         const storedSync = localStorage.getItem(STORAGE.scrollSync);
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
@@ -228,11 +235,17 @@ export class EveryTextLineEditor {
         this.renderDrawer();
         await this.editorReady;
         await this.refreshSources();
+        this.startSourceEventListeners();
         this.startSourceWatcher();
     }
 
     destroy() {
         this.stopSourceWatcher();
+        this.stopSourceEventListeners();
+        if (this.runtimeSourceRefreshTimer !== null) {
+            window.clearTimeout(this.runtimeSourceRefreshTimer);
+            this.runtimeSourceRefreshTimer = null;
+        }
         this.closeMonacoDiff({ syncValue: true });
         this.disposeMonacoSpellcheckers();
         this.editor?.dispose?.();
@@ -527,7 +540,7 @@ export class EveryTextLineEditor {
                 onInitialCommit: async () => {
                     const groupToCommit = this.selectedHistoryGroup || this.selectedSource?.group;
                     if (!groupToCommit) return;
-                    const sourcesInGroup = this.sources.filter(s => s.group === groupToCommit && !s.readonly && !s.placeholder);
+                    const sourcesInGroup = this.sources.filter(s => s.group === groupToCommit && !s.readonly && !s.placeholder && !this.isSourceIgnoredForHistory(s));
                     const batchId = this.createHistoryBatchId();
                     const scope = this.getHistoryScope(sourcesInGroup[0]);
                     
@@ -544,7 +557,7 @@ export class EveryTextLineEditor {
                 },
                 onManualCommit: async (message, changedSources) => {
                     const batchId = this.createHistoryBatchId();
-                    await Promise.all(changedSources.map(async ({ source }) => {
+                    await Promise.all(changedSources.filter(({ source }) => !this.isSourceIgnoredForHistory(source)).map(async ({ source }) => {
                         try {
                             const value = source.read();
                             await this.historyStore.commit(source, value, 'manual', message || undefined, batchId, this.getHistoryScope(source));
@@ -1213,6 +1226,51 @@ export class EveryTextLineEditor {
         }
     }
 
+    startSourceEventListeners() {
+        if (this.sourceEventHandlers.length) return;
+        const refresh = () => this.scheduleRuntimeSourceRefresh();
+        const events = [
+            event_types.CHAT_CHANGED,
+            event_types.CHARACTER_EDITED,
+            event_types.CHARACTER_DELETED,
+            event_types.CHARACTER_DUPLICATED,
+            event_types.CHARACTER_RENAMED,
+            event_types.CHARACTER_PAGE_LOADED,
+            'groupSelected',
+        ];
+        for (const event of events) {
+            eventSource.on(event, refresh);
+            this.sourceEventHandlers.push([event, refresh]);
+        }
+    }
+
+    stopSourceEventListeners() {
+        for (const [event, handler] of this.sourceEventHandlers) {
+            eventSource.removeListener(event, handler);
+        }
+        this.sourceEventHandlers = [];
+    }
+
+    scheduleRuntimeSourceRefresh() {
+        if (this.runtimeSourceRefreshTimer !== null) {
+            window.clearTimeout(this.runtimeSourceRefreshTimer);
+        }
+        this.runtimeSourceRefreshTimer = window.setTimeout(() => {
+            this.runtimeSourceRefreshTimer = null;
+            this.refreshSourcesFromRuntime().catch((error) => console.warn(`[${NAME}] Failed to refresh runtime sources`, error));
+        }, 100);
+    }
+
+    async refreshSourcesFromRuntime() {
+        const selectedCurrentCard = this.selectedSource?.id.startsWith('current-character-card:') ?? false;
+        if (this.dirty && !(selectedCurrentCard && this.selectedSourceChanged)) {
+            this.updateStatusBar();
+            return;
+        }
+        await this.refreshSources(true);
+        if (this.selectedSidebarTab === 'history') this.refreshHistory();
+    }
+
     async selectInitialSource() {
         const storedId = localStorage.getItem(STORAGE.selectedSource);
         const visibleSources = this.getTrackedSources();
@@ -1279,7 +1337,8 @@ export class EveryTextLineEditor {
         this.updateStatusBar();
     }
 
-    openSourceControlDialog() {
+    async openSourceControlDialog() {
+        await this.refreshSources(true);
         openSourceControlDialog(this);
     }
 
@@ -1437,18 +1496,28 @@ export class EveryTextLineEditor {
         if (!this.selectedSource || this.historyCommit?.sourceId === this.selectedSource.id) return;
         if (this.sourceWatchInFlight) return;
 
+        const watchedSource = this.selectedSource;
         let liveValue: string;
         try {
             this.sourceWatchInFlight = true;
-            liveValue = String(await (this.selectedSource.readFresh?.() ?? this.selectedSource.read()));
+            liveValue = String(await (watchedSource.readFresh?.() ?? watchedSource.read()));
         } catch (error) {
+            if (watchedSource.id.startsWith('current-character-card:')) {
+                await this.refreshSources(true);
+                return;
+            }
             console.warn(`[${NAME}] Failed to read selected source`, error);
             return;
         } finally {
             this.sourceWatchInFlight = false;
         }
 
+        if (this.selectedSource?.id !== watchedSource.id) return;
         if (liveValue === this.selectedSourceBaseline) return;
+        if (watchedSource.id.startsWith('current-character-card:')) {
+            await this.refreshSources(true);
+            return;
+        }
         this.selectedSourceBaseline = liveValue;
         this.selectedSourceChanged = true;
         this.updateDirty(this.isCurrentEditorDirty());
@@ -1486,6 +1555,16 @@ export class EveryTextLineEditor {
             this.editor?.update?.();
             this.layoutMonacoDiff();
         });
+    }
+
+    setIgnoreFullJsonHistory(enabled: boolean) {
+        localStorage.setItem(STORAGE.ignoreFullJsonHistory, JSON.stringify(enabled));
+        this.updateStatusBar();
+        if (this.selectedSidebarTab === 'history') this.refreshHistory();
+    }
+
+    isSourceIgnoredForHistory(source?: TextSource | null): boolean {
+        return !!source?.excludeFromHistory && isFullJsonHistoryIgnored();
     }
 
     isMonacoMinimapEffectivelyEnabled() {
@@ -2007,6 +2086,7 @@ export class EveryTextLineEditor {
         this.dom.root?.classList.toggle('etle--syncOff', this.scrollSyncMode.id === 'off');
         this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="wrap"]')?.classList.toggle('etle--activeButton', wrapEnabled);
         this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="spell"]')?.classList.toggle('etle--activeButton', spellCheckEnabled);
+        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="ignoreFullJsonHistory"]')?.classList.toggle('etle--activeButton', isFullJsonHistoryIgnored());
         const minimapSetting = this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="minimap"]');
         minimapSetting?.classList.toggle('etle--activeButton', minimapEnabled);
         if (minimapSetting) {
@@ -2107,15 +2187,17 @@ export class EveryTextLineEditor {
     }
 
     getDiffOriginalValue() {
-        if (this.historyCommit?.sourceId === this.selectedSource?.id) return this.historyCommit.content;
+        const commit = this.historyCommit;
+        if (commit && commit.sourceId === this.selectedSource?.id) return commit.content;
         return this.selectedSource ? this.selectedSourceBaseline : '';
     }
 
     getDiffSideLabels() {
         const sourceLabel = this.selectedSource?.label ?? 'No source';
-        if (this.historyCommit?.sourceId === this.selectedSource?.id) {
-            const message = this.historyCommit.meta?.message || this.historyCommit.reason || 'snapshot';
-            const date = new Date(this.historyCommit.createdAt).toLocaleString();
+        const commit = this.historyCommit;
+        if (commit && commit.sourceId === this.selectedSource?.id) {
+            const message = commit.meta?.message || commit.reason || 'snapshot';
+            const date = new Date(commit.createdAt).toLocaleString();
             return {
                 left: `${sourceLabel} ; Snapshot: ${message} (${date}) (read-only)`,
                 right: `${sourceLabel} ; Working draft`,
@@ -2341,7 +2423,7 @@ export class EveryTextLineEditor {
         // 1. Detect Changes
         const changedSources: ChangedSource[] = [];
         await Promise.all(groupSources.map(async (source) => {
-            if (source.readonly || source.placeholder) return;
+            if (source.readonly || source.placeholder || this.isSourceIgnoredForHistory(source)) return;
             
             const latest = await this.historyStore.getLatestSource(source.id, this.getHistoryScope(source, scope).scopeId);
             const currentValue = source.read();
