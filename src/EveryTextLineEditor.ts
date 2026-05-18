@@ -14,12 +14,15 @@ import { getSpellchecker, MonacoSpellchecker } from './vendor/monaco-spellchecke
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
 import './vendor/prism-code-editor/grammars/json.js';
+import './vendor/prism-code-editor/grammars/css.js';
 
 import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
-import { getCollapsedGroups, getLineDiff, getSources, setCollapsedGroups } from './SourceManager.js';
+import { getCollapsedGroups, getLineDiff, getSources } from './SourceManager.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
+import { renderSettingsPanel } from './SettingsPanel.js';
+import { isLorebookGroup, openSourceControlDialog, renderSourceTree } from './SourcePanel.js';
 
 // Disable tag highlighting to prevent misalignment issues
 if (Prism.languages.markdown) {
@@ -148,6 +151,7 @@ export class EveryTextLineEditor {
     sources: TextSource[];
     selectedSource: TextSource | null;
     selectedSourceBaseline: string;
+    selectedSourceChanged: boolean;
     dirty: boolean;
     collapsedGroups: Set<string>;
     currentLanguage: Language = LANGUAGES[0];
@@ -179,11 +183,14 @@ export class EveryTextLineEditor {
     sourceLanguages: Record<string, string>;
     suppressEditorChange: boolean;
     trackedSourceGroups: Set<string>;
+    sourceWatchTimer: number | null;
+    sourceWatchInFlight: boolean;
 
     constructor() {
         this.sources = [];
         this.selectedSource = null;
         this.selectedSourceBaseline = '';
+        this.selectedSourceChanged = false;
         this.dirty = false;
         this.collapsedGroups = getCollapsedGroups();
         this.dom = {};
@@ -211,6 +218,8 @@ export class EveryTextLineEditor {
         this.sourceLanguages = getStoredSourceLanguages();
         this.suppressEditorChange = false;
         this.trackedSourceGroups = new Set(getTrackedSourceGroups());
+        this.sourceWatchTimer = null;
+        this.sourceWatchInFlight = false;
         const storedSync = localStorage.getItem(STORAGE.scrollSync);
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
@@ -219,9 +228,11 @@ export class EveryTextLineEditor {
         this.renderDrawer();
         await this.editorReady;
         await this.refreshSources();
+        this.startSourceWatcher();
     }
 
     destroy() {
+        this.stopSourceWatcher();
         this.closeMonacoDiff({ syncValue: true });
         this.disposeMonacoSpellcheckers();
         this.editor?.dispose?.();
@@ -324,10 +335,10 @@ export class EveryTextLineEditor {
         sidebarTitle.textContent = 'Every Text Line Editor';
         sidebarHead.append(sidebarTitle);
 
-        const refresh = this.makeIconButton('fa-rotate', 'Refresh sources', () => this.refreshSources(true));
+        const refresh = this.makeIconButton('fa-sync-alt', 'Refresh sources', () => this.refreshSources(true));
         sidebarHead.append(refresh);
 
-        const collapseSidebar = this.makeIconButton('fa-angles-left', 'Collapse sidebar', () => this.setSidebarCollapsed(true));
+        const collapseSidebar = this.makeIconButton('fa-angle-double-left', 'Collapse sidebar', () => this.setSidebarCollapsed(true));
         this.dom.sidebarCollapse = collapseSidebar;
         sidebarHead.append(collapseSidebar);
 
@@ -366,7 +377,7 @@ export class EveryTextLineEditor {
         const sourcesToolbar = document.createElement('div');
         this.dom.sourcesToolbar = sourcesToolbar;
         sourcesToolbar.classList.add('etle--sourcesToolbar');
-        const addSource = this.makeTextButton('Control', 'fa-sliders', () => this.openSourceControlDialog());
+        const addSource = this.makeTextButton('Control', 'fa-filter', () => this.openSourceControlDialog());
         this.dom.addSource = addSource;
         const tree = document.createElement('div');
         this.dom.tree = tree;
@@ -381,146 +392,7 @@ export class EveryTextLineEditor {
         historyPanel.dataset.tab = 'history';
         sidebarBody.append(historyPanel);
 
-        const settingsPanel = document.createElement('section');
-        this.dom.settingsPanel = settingsPanel;
-        settingsPanel.classList.add('etle--tabPanel', 'etle--settingsPanel');
-        settingsPanel.dataset.tab = 'settings';
-        
-        const settingsHead = document.createElement('div');
-        settingsHead.classList.add('etle--settingsHead');
-        settingsHead.innerHTML = '<h4>Settings</h4>';
-        settingsPanel.append(settingsHead);
-        
-        const settingsBody = document.createElement('div');
-        settingsBody.classList.add('etle--settingsBody');
-
-        const editorGroup = this.createPropGroup('Editor');
-        const wrapButton = this.makeTextButton('Word Wrap', 'fa-align-left', () => this.setWordWrap(!JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true')));
-        wrapButton.dataset.setting = 'wrap';
-        const spellButton = this.makeTextButton('Spell Check', 'fa-spell-check', () => this.setSpellCheck(!isSpellCheckEnabled()));
-        spellButton.dataset.setting = 'spell';
-        const minimapButton = this.makeTextButton('Monaco Minimap', 'fa-map', () => this.setMonacoMinimap(!isMonacoMinimapEnabled()));
-        minimapButton.dataset.setting = 'minimap';
-        const editorButtons = document.createElement('div');
-        editorButtons.classList.add('etle--settingsButtonRow');
-        editorButtons.append(wrapButton, spellButton, minimapButton);
-        editorGroup.append(editorButtons);
-        settingsBody.append(editorGroup);
-
-        const editorSelects = document.createElement('div');
-        editorSelects.classList.add('etle--settingsGrid');
-
-        const engineGroup = this.createPropGroup('Engine');
-        const engineSelect = document.createElement('select');
-        this.dom.editorEngine = engineSelect;
-        engineSelect.classList.add('text_pole');
-        for (const engine of EDITOR_ENGINES) {
-            const option = document.createElement('option');
-            option.value = engine.id;
-            option.textContent = engine.label;
-            engineSelect.append(option);
-        }
-        engineSelect.value = this.editorEngine.id;
-        engineSelect.addEventListener('change', () => {
-            const engine = EDITOR_ENGINES.find(item => item.id === engineSelect.value) ?? EDITOR_ENGINES[0];
-            this.setEditorEngine(engine).catch((error) => {
-                console.error(`[${NAME}] Failed to switch editor engine`, error);
-                engineSelect.value = this.editorEngine.id;
-            });
-        });
-        engineGroup.append(engineSelect);
-        editorSelects.append(engineGroup);
-
-        const indentGroup = this.createPropGroup('Indentation');
-        const indentSelect = document.createElement('select');
-        indentSelect.classList.add('text_pole');
-        for (const mode of INDENT_MODES) {
-            const option = document.createElement('option');
-            option.value = mode.id;
-            option.textContent = mode.label;
-            indentSelect.append(option);
-        }
-        indentSelect.value = this.indentMode.id;
-        indentSelect.addEventListener('change', () => {
-            const mode = INDENT_MODES.find(item => item.id === indentSelect.value) ?? INDENT_MODES[0];
-            this.indentMode = mode;
-            localStorage.setItem(STORAGE.indentMode, mode.id);
-            this.editor?.setOptions({ insertSpaces: mode.insertSpaces, tabSize: mode.tabSize });
-            this.oldEditor?.setOptions({ insertSpaces: mode.insertSpaces, tabSize: mode.tabSize });
-            this.applyMonacoDiffIndentOptions();
-            this.updateStatusBar();
-        });
-        indentGroup.append(indentSelect);
-        editorSelects.append(indentGroup);
-
-        const languageGroup = this.createPropGroup('Language');
-        const languageSelect = document.createElement('select');
-        languageSelect.classList.add('text_pole');
-        for (const lang of LANGUAGES) {
-            const option = document.createElement('option');
-            option.value = lang.id;
-            option.textContent = lang.label;
-            languageSelect.append(option);
-        }
-        languageSelect.value = this.currentLanguage.id;
-        languageSelect.addEventListener('change', () => {
-            this.setLanguage(LANGUAGES.find(item => item.id === languageSelect.value) ?? LANGUAGES[0]);
-        });
-        languageGroup.append(languageSelect);
-        editorSelects.append(languageGroup);
-
-        const syncGroup = this.createPropGroup('Scroll Sync');
-        const syncSelect = document.createElement('select');
-        syncSelect.classList.add('text_pole');
-        for (const mode of SYNC_MODES) {
-            const option = document.createElement('option');
-            option.value = mode.id;
-            option.textContent = mode.label;
-            syncSelect.append(option);
-        }
-        syncSelect.value = this.scrollSyncMode.id;
-        syncSelect.addEventListener('change', () => {
-            this.setScrollSync(SYNC_MODES.find(item => item.id === syncSelect.value) ?? SYNC_MODES[1]);
-        });
-        syncGroup.append(syncSelect);
-        editorSelects.append(syncGroup);
-        settingsBody.append(editorSelects);
-        
-        const historyGroup = this.createPropGroup('History');
-        const historyGrid = document.createElement('div');
-        historyGrid.classList.add('etle--settingsGrid');
-        const limitGroup = this.createPropGroup('Commits per Source');
-        const limitInput = document.createElement('input');
-        limitInput.type = 'number';
-        limitInput.value = '100';
-        limitInput.disabled = true;
-        limitInput.classList.add('text_pole');
-        limitGroup.append(limitInput);
-        historyGrid.append(limitGroup);
-
-        const storageGroup = this.createPropGroup('Storage');
-        const storageNote = document.createElement('small');
-        storageNote.textContent = 'IndexedDB, local to this browser. Apply still controls SillyTavern saves.';
-        storageGroup.append(storageNote);
-        historyGrid.append(storageGroup);
-        historyGroup.append(historyGrid);
-        const historyActions = document.createElement('div');
-        historyActions.classList.add('etle--settingsButtonRow');
-        const exportBtn = this.makeTextButton('Export History', 'fa-file-export', () => this.exportHistory().catch(error => {
-            console.error(`[${NAME}] Failed to export history`, error);
-            globalThis.toastr?.error?.('Failed to export history. See console for details.');
-        }));
-        const clearBtn = this.makeTextButton('Clear History', 'fa-trash', () => this.clearHistory().catch(error => {
-            console.error(`[${NAME}] Failed to clear history`, error);
-            globalThis.toastr?.error?.('Failed to clear history. See console for details.');
-        }));
-        clearBtn.classList.add('redWarningBG');
-        historyActions.append(exportBtn, clearBtn);
-        historyGroup.append(historyActions);
-        settingsBody.append(historyGroup);
-
-        settingsPanel.append(settingsBody);
-        sidebarBody.append(settingsPanel);
+        sidebarBody.append(renderSettingsPanel(this));
 
         this.setSidebarTab(this.selectedSidebarTab);
 
@@ -537,7 +409,7 @@ export class EveryTextLineEditor {
         header.classList.add('etle--header');
         main.append(header);
 
-        const restoreSidebar = this.makeIconButton('fa-angles-right', 'Show sidebar', () => this.setSidebarCollapsed(false));
+        const restoreSidebar = this.makeIconButton('fa-angle-double-right', 'Show sidebar', () => this.setSidebarCollapsed(false));
         this.dom.sidebarRestore = restoreSidebar;
         restoreSidebar.classList.add('etle--sidebarRestore');
         header.append(restoreSidebar);
@@ -580,11 +452,11 @@ export class EveryTextLineEditor {
         actionsRight.classList.add('etle--actions', 'etle--actions-right');
         header.append(actionsRight);
 
-        this.dom.diff = this.makeTextButton('Diff', 'fa-code-compare', () => this.toggleDiff());
-        this.dom.revert = this.makeTextButton('', 'fa-rotate-left', () => this.revert());
+        this.dom.diff = this.makeTextButton('Diff', 'fa-code-branch', () => this.toggleDiff());
+        this.dom.revert = this.makeTextButton('', 'fa-undo', () => this.revert());
         this.dom.apply = this.makeTextButton('', 'fa-check', () => this.apply());
 
-        actionsRight.append(this.dom.diff, this.dom.revert, this.dom.apply, this.makeIconButton('fa-xmark', 'Close editor', () => this.close().catch((error) => console.error(`[${NAME}] Failed to close editor`, error))));
+        actionsRight.append(this.dom.diff, this.dom.revert, this.dom.apply, this.makeIconButton('fa-times', 'Close editor', () => this.close().catch((error) => console.error(`[${NAME}] Failed to close editor`, error))));
 
         const workspace = document.createElement('div');
         this.dom.workspace = workspace;
@@ -947,8 +819,11 @@ export class EveryTextLineEditor {
         this.dom.statusLanguage = language;
         language.type = 'button';
         language.classList.add('etle--statusButton');
-        language.title = 'Cycle language';
-        language.addEventListener('click', () => this.cycleLanguage());
+        language.title = 'Choose syntax language';
+        language.addEventListener('click', (event) => {
+            event.stopPropagation();
+            this.toggleLanguageMenu();
+        });
         right.append(language);
 
         const engine = document.createElement('button');
@@ -1097,10 +972,6 @@ export class EveryTextLineEditor {
         container.append(focusProxy);
 
         const model = monaco.editor.createModel(value, this.getMonacoLanguageId());
-        model.updateOptions({
-            tabSize: this.indentMode.tabSize,
-            insertSpaces: this.indentMode.insertSpaces,
-        });
         const monacoEditor = monaco.editor.create(container, {
             model,
             readOnly,
@@ -1109,8 +980,6 @@ export class EveryTextLineEditor {
             lineNumbers: 'on',
             scrollBeyondLastLine: false,
             wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
-            tabSize: this.indentMode.tabSize,
-            insertSpaces: this.indentMode.insertSpaces,
             theme: 'vs-dark',
         });
         this.monacoEditor = monacoEditor;
@@ -1163,16 +1032,6 @@ export class EveryTextLineEditor {
                 }
                 if (typeof options.language === 'string') {
                     monaco.editor.setModelLanguage(model, options.language === 'text' ? 'plaintext' : options.language);
-                }
-                if (typeof options.tabSize === 'number' || typeof options.insertSpaces === 'boolean') {
-                    model.updateOptions({
-                        tabSize: options.tabSize ?? this.indentMode.tabSize,
-                        insertSpaces: options.insertSpaces ?? this.indentMode.insertSpaces,
-                    });
-                    monacoEditor.updateOptions({
-                        tabSize: options.tabSize ?? this.indentMode.tabSize,
-                        insertSpaces: options.insertSpaces ?? this.indentMode.insertSpaces,
-                    });
                 }
                 if (typeof options.spellCheck === 'boolean') {
                     this.applySpellCheckToTextArea(focusProxy);
@@ -1358,112 +1217,7 @@ export class EveryTextLineEditor {
     }
 
     renderTree() {
-        this.dom.tree.innerHTML = '';
-        const groups = new Map<string, { label: string; branchName: string; sources: TextSource[] }>();
-        const trackedSources = this.getTrackedSources();
-        for (const source of trackedSources) {
-            const treeGroup = this.getTreeGroupForSource(source);
-            if (!groups.has(treeGroup.key)) {
-                groups.set(treeGroup.key, {
-                    label: treeGroup.label,
-                    branchName: treeGroup.branchName,
-                    sources: [],
-                });
-            }
-            groups.get(treeGroup.key)?.sources.push(source);
-        }
-
-        if (!groups.size) {
-            const empty = document.createElement('div');
-            empty.classList.add('etle--empty');
-            empty.textContent = this.sources.length
-                ? 'No source categories selected. Click Control to choose what appears here.'
-                : 'No sources available';
-            this.dom.tree.append(empty);
-            return;
-        }
-
-        for (const [group, treeGroup] of groups) {
-            const { label, branchName, sources } = treeGroup;
-            const section = document.createElement('section');
-            section.classList.add('etle--group');
-            if (this.collapsedGroups.has(group)) section.classList.add('etle--collapsed');
-
-            const header = document.createElement('button');
-            header.type = 'button';
-            header.classList.add('etle--groupHeader');
-            header.innerHTML = `<span class="fa-solid fa-fw fa-chevron-down"></span><span></span><small></small>`;
-            header.children[1].textContent = label;
-            header.children[2].textContent = String(sources.length);
-            header.addEventListener('click', () => {
-                if (this.collapsedGroups.has(group)) this.collapsedGroups.delete(group);
-                else this.collapsedGroups.add(group);
-                setCollapsedGroups(this.collapsedGroups);
-                this.renderTree();
-            });
-            section.append(header);
-
-            if (branchName) {
-                const branchLine = document.createElement('div');
-                branchLine.classList.add('etle--groupBranch');
-                branchLine.textContent = branchName;
-                branchLine.title = branchName;
-                section.append(branchLine);
-            }
-
-            const list = document.createElement('div');
-            list.classList.add('etle--sourceList');
-            let previousSourceGroup = '';
-            for (const source of sources) {
-                if (source.group !== previousSourceGroup) {
-                    previousSourceGroup = source.group;
-                    const subgroup = document.createElement('div');
-                    subgroup.classList.add('etle--sourceSubgroup');
-                    subgroup.textContent = source.group;
-                    list.append(subgroup);
-                }
-
-                const item = document.createElement('div');
-                item.classList.add('etle--source');
-                item.dataset.sourceId = source.id;
-                if (this.selectedSource?.id === source.id) item.classList.add('etle--active');
-                if (source.readonly) item.classList.add('etle--readonly');
-                if (source.placeholder) item.classList.add('etle--placeholder');
-
-                if (source.toggleable) {
-                    const toggle = document.createElement('button');
-                    toggle.type = 'button';
-                    toggle.classList.add('etle--promptToggle', 'menu_button', 'fa-solid', 'fa-fw');
-                    toggle.classList.add(source.enabled ? 'fa-toggle-on' : 'fa-toggle-off');
-                    toggle.title = source.enabled ? 'Disable prompt' : 'Enable prompt';
-                    toggle.addEventListener('click', async (event) => {
-                        event.stopPropagation();
-                        await this.toggleSource(source);
-                    });
-                    item.append(toggle);
-                } else {
-                    const spacer = document.createElement('span');
-                    spacer.classList.add('etle--sourceSpacer');
-                    item.append(spacer);
-                }
-
-                const select = document.createElement('button');
-                select.type = 'button';
-                select.classList.add('etle--sourceSelect');
-                select.disabled = source.selectable === false;
-                select.innerHTML = '<span class="etle--sourceLang"></span><span></span>';
-                const lang = this.getLanguageForSource(source);
-                select.children[0].textContent = lang.label;
-                select.children[0].setAttribute('title', `${lang.label} syntax`);
-                select.children[1].textContent = source.label;
-                item.title = source.label;
-                select.addEventListener('click', () => this.selectSource(source.id).catch((error) => console.error(`[${NAME}] Failed to select source`, error)));
-                item.append(select);
-                list.append(item);
-            }
-            section.append(list);
-            this.dom.tree.append(section);
-        }
+        renderSourceTree(this);
     }
 
     getTrackedSources() {
@@ -1505,6 +1259,7 @@ export class EveryTextLineEditor {
     clearSelectedSource(title: string, detail: string) {
         this.selectedSource = null;
         this.selectedSourceBaseline = '';
+        this.selectedSourceChanged = false;
         this.historyCommit = undefined;
         localStorage.removeItem(STORAGE.selectedSource);
         this.setEditorValue('');
@@ -1518,96 +1273,7 @@ export class EveryTextLineEditor {
     }
 
     openSourceControlDialog() {
-        const sourceGroups = new Map<string, number>();
-        for (const source of this.sources) {
-            sourceGroups.set(source.group, (sourceGroups.get(source.group) ?? 0) + 1);
-        }
-        const availableGroups = [...sourceGroups.entries()];
-        const dialog = document.createElement('dialog');
-        dialog.classList.add('etle--sourceDialog');
-
-        const shell = document.createElement('form');
-        shell.method = 'dialog';
-        shell.classList.add('etle--sourceDialogShell');
-
-        const title = document.createElement('h3');
-        title.textContent = 'Source Categories';
-        shell.append(title);
-
-        const list = document.createElement('div');
-        list.classList.add('etle--sourceDialogList');
-        shell.append(list);
-
-        if (!availableGroups.length) {
-            const empty = document.createElement('div');
-            empty.classList.add('etle--empty');
-            empty.textContent = 'No sources available.';
-            list.append(empty);
-        } else {
-            for (const [group, count] of availableGroups) {
-                const row = document.createElement('label');
-                row.classList.add('etle--sourceDialogRow');
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.value = group;
-                checkbox.checked = this.trackedSourceGroups.has(group);
-                const text = document.createElement('span');
-                text.textContent = `${group} (${count})`;
-                row.append(checkbox, text);
-                list.append(row);
-            }
-        }
-
-        const actions = document.createElement('div');
-        actions.classList.add('etle--sourceDialogActions');
-        const cancel = this.makeTextButton('Cancel', 'fa-xmark', () => dialog.close());
-        cancel.value = 'cancel';
-        const add = this.makeTextButton('Apply', 'fa-check', () => {
-            const selected = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]:checked')].map(input => input.value);
-            this.setTrackedSourceGroups(selected).catch((error) => console.error(`[${NAME}] Failed to update source categories`, error));
-            dialog.close();
-        });
-        add.disabled = !availableGroups.length;
-        actions.append(cancel, add);
-        shell.append(actions);
-
-        dialog.append(shell);
-        document.body.append(dialog);
-        dialog.addEventListener('close', () => dialog.remove(), { once: true });
-        dialog.showModal();
-    }
-
-    getTreeGroupForSource(source: TextSource) {
-        const branchName = source.branchManager?.getCurrentBranch?.() ?? '';
-        if (!branchName) {
-            return {
-                key: source.group,
-                label: source.group,
-                branchName: '',
-            };
-        }
-
-        const scopeLabel = this.getTreeBranchScopeLabel(source);
-        return {
-            key: `${scopeLabel}:${branchName}`,
-            label: scopeLabel,
-            branchName,
-        };
-    }
-
-    getTreeBranchScopeLabel(source: TextSource) {
-        if (source.group.includes('Chat Completion')
-            || source.group.includes('Utility')
-            || source.group.includes('Formatting')
-            || source.group.includes('Custom OpenAI')) {
-            return 'Chat Completion Preset';
-        }
-        if (source.group.includes('Text Completion')) return 'Text Completion Preset';
-        if (source.group.includes('Power User Context')) return 'Context Template';
-        if (source.group.includes('Power User Instruct')) return 'Instruct Template';
-        if (source.group.includes('System Prompt')) return 'System Prompt Preset';
-        if (source.group.includes('Connection Profiles')) return 'Connection Profile';
-        return source.group;
+        openSourceControlDialog(this);
     }
 
     getLanguageForSource(source?: TextSource | null): Language {
@@ -1620,10 +1286,12 @@ export class EveryTextLineEditor {
 
     guessLanguageForSource(source: TextSource): Language {
         const jsonLanguage = LANGUAGES.find(lang => lang.id === 'json') ?? LANGUAGES[0];
+        const cssLanguage = LANGUAGES.find(lang => lang.id === 'css') ?? LANGUAGES[0];
         const markdownLanguage = LANGUAGES.find(lang => lang.id === 'markdown') ?? LANGUAGES[0];
         const textLanguage = LANGUAGES.find(lang => lang.id === 'text') ?? LANGUAGES[0];
         const id = source.id.toLowerCase();
         const label = source.label.toLowerCase();
+        if (id.includes('custom_css') || label.includes('css')) return cssLanguage;
         if (source.group.includes('Connection Profiles')) return jsonLanguage;
         if (id.includes('custom_include_body') || id.includes('custom_exclude_body') || id.includes('custom_include_headers')) return jsonLanguage;
         if (label.includes('json')) return jsonLanguage;
@@ -1673,6 +1341,7 @@ export class EveryTextLineEditor {
         if (this.historyCommit?.sourceId !== source.id) this.historyCommit = undefined;
         localStorage.setItem(STORAGE.selectedSource, source.id);
         this.selectedSourceBaseline = source.read();
+        this.selectedSourceChanged = false;
         this.currentLanguage = this.getLanguageForSource(source);
         this.updateHeader();
         this.editor?.setOptions({ readOnly: !!source.readonly });
@@ -1741,6 +1410,41 @@ export class EveryTextLineEditor {
 
     isCurrentEditorDirty() {
         return this.isValueDirty(this.getCurrentEditorValue());
+    }
+
+    startSourceWatcher() {
+        this.stopSourceWatcher();
+        this.sourceWatchTimer = window.setInterval(() => {
+            this.refreshSelectedSourceBaseline().catch((error) => console.warn(`[${NAME}] Failed to refresh selected source`, error));
+        }, 500);
+    }
+
+    stopSourceWatcher() {
+        if (this.sourceWatchTimer === null) return;
+        window.clearInterval(this.sourceWatchTimer);
+        this.sourceWatchTimer = null;
+    }
+
+    async refreshSelectedSourceBaseline() {
+        if (!this.selectedSource || this.historyCommit?.sourceId === this.selectedSource.id) return;
+        if (this.sourceWatchInFlight) return;
+
+        let liveValue: string;
+        try {
+            this.sourceWatchInFlight = true;
+            liveValue = String(await (this.selectedSource.readFresh?.() ?? this.selectedSource.read()));
+        } catch (error) {
+            console.warn(`[${NAME}] Failed to read selected source`, error);
+            return;
+        } finally {
+            this.sourceWatchInFlight = false;
+        }
+
+        if (liveValue === this.selectedSourceBaseline) return;
+        this.selectedSourceBaseline = liveValue;
+        this.selectedSourceChanged = true;
+        this.updateDirty(this.isCurrentEditorDirty());
+        this.renderDiff();
     }
 
     setWordWrap(enabled) {
@@ -1824,7 +1528,7 @@ export class EveryTextLineEditor {
         const monaco = globalThis.monaco ?? await loadMonaco();
         const dictionary = await loadEnglishDictionary();
         const spellchecker = getSpellchecker(monaco, monacoEditor, {
-            languageSelector: ['markdown', 'plaintext', 'json', 'yaml'],
+            languageSelector: ['markdown', 'plaintext', 'json', 'yaml', 'css'],
             severity: monaco.MarkerSeverity.Info,
             check: (word: string) => {
                 const normalized = word.toLowerCase();
@@ -1892,6 +1596,7 @@ export class EveryTextLineEditor {
         return this.monacoIgnoredWords.has(word)
             || [
                 'api',
+                'css',
                 'json',
                 'yaml',
                 'npc',
@@ -1904,7 +1609,11 @@ export class EveryTextLineEditor {
 
     cycleIndentMode() {
         const index = INDENT_MODES.findIndex(mode => mode.id === this.indentMode.id);
-        this.indentMode = INDENT_MODES[(index + 1) % INDENT_MODES.length];
+        this.setIndentMode(INDENT_MODES[(index + 1) % INDENT_MODES.length]);
+    }
+
+    setIndentMode(mode: IndentMode) {
+        this.indentMode = mode;
         localStorage.setItem(STORAGE.indentMode, this.indentMode.id);
         this.editor?.setOptions({
             insertSpaces: this.indentMode.insertSpaces,
@@ -1914,14 +1623,7 @@ export class EveryTextLineEditor {
             insertSpaces: this.indentMode.insertSpaces,
             tabSize: this.indentMode.tabSize,
         });
-        this.applyMonacoDiffIndentOptions();
         this.updateStatusBar();
-    }
-
-    cycleLanguage() {
-        const index = LANGUAGES.findIndex(lang => lang.id === this.currentLanguage.id);
-        const nextIndex = (index + 1) % LANGUAGES.length;
-        this.setLanguage(LANGUAGES[nextIndex]);
     }
 
     setLanguage(lang: Language) {
@@ -1932,6 +1634,60 @@ export class EveryTextLineEditor {
         this.setMonacoDiffLanguage();
         this.updateStatusBar();
         this.renderTree();
+    }
+
+    toggleLanguageMenu() {
+        if (this.dom.statusLanguageMenu) {
+            this.closeLanguageMenu();
+            return;
+        }
+        this.openLanguageMenu();
+    }
+
+    openLanguageMenu() {
+        const anchor = this.dom.statusLanguage;
+        if (!anchor) return;
+        const menu = document.createElement('div');
+        this.dom.statusLanguageMenu = menu;
+        menu.classList.add('etle--statusDropup');
+        for (const lang of LANGUAGES) {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.classList.add('etle--statusDropupItem');
+            item.textContent = lang.label;
+            item.classList.toggle('etle--active', lang.id === this.currentLanguage.id);
+            item.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.setLanguage(lang);
+                this.closeLanguageMenu();
+            });
+            menu.append(item);
+        }
+        document.body.append(menu);
+        this.positionLanguageMenu();
+        const close = (event: MouseEvent) => {
+            if (event.target instanceof Node && (menu.contains(event.target) || anchor.contains(event.target))) return;
+            this.closeLanguageMenu();
+        };
+        menu.dataset.closeListener = '1';
+        setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
+    }
+
+    positionLanguageMenu() {
+        const menu = this.dom.statusLanguageMenu;
+        const anchor = this.dom.statusLanguage;
+        if (!menu || !anchor) return;
+        const rect = anchor.getBoundingClientRect();
+        const menuRect = menu.getBoundingClientRect();
+        const left = Math.min(window.innerWidth - menuRect.width - 6, Math.max(6, rect.right - menuRect.width));
+        const top = Math.max(6, rect.top - menuRect.height - 6);
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+    }
+
+    closeLanguageMenu() {
+        this.dom.statusLanguageMenu?.remove();
+        this.dom.statusLanguageMenu = undefined;
     }
 
     cycleScrollSync() {
@@ -1997,6 +1753,8 @@ export class EveryTextLineEditor {
                 });
             }
             this.dom.actionsLeft.innerHTML = '';
+            this.dom.actionsLeft.hidden = isLorebookGroup(source.group);
+            if (this.dom.actionsLeft.hidden) return;
             const meta = source.metadata;
             if (meta) {
                 if (meta.role) {
@@ -2183,8 +1941,11 @@ export class EveryTextLineEditor {
         }
 
         if (this.dom.statusDirty) {
-            this.dom.statusDirty.textContent = this.dirty ? 'Unsaved changes' : 'All changes saved';
+            this.dom.statusDirty.textContent = this.selectedSourceChanged
+                ? (this.dirty ? 'Source changed; draft differs' : 'Source changed')
+                : this.dirty ? 'Unsaved changes' : 'All changes saved';
             this.dom.statusDirty.classList.toggle('etle--statusDirty', this.dirty);
+            this.dom.statusDirty.classList.toggle('etle--statusSourceChanged', this.selectedSourceChanged);
         }
         if (this.dom.statusSourceCount) {
             this.dom.statusSourceCount.textContent = `${this.trackedSourceGroups.size}/${new Set(this.sources.map(source => source.group)).size} categories`;
@@ -2201,6 +1962,7 @@ export class EveryTextLineEditor {
             this.dom.statusSelection.hidden = !stats.selection;
         }
         if (this.dom.statusIndent) {
+            this.dom.statusIndent.hidden = this.editorEngine.id !== 'prism';
             this.dom.statusIndent.textContent = this.indentMode.label;
         }
         if (this.dom.statusWrap) {
@@ -2258,7 +2020,8 @@ export class EveryTextLineEditor {
             this.selectedSource.write(value);
             await this.selectedSource.save?.();
             this.historyCommit = undefined;
-            this.selectedSourceBaseline = value;
+            this.selectedSourceBaseline = this.selectedSource.read();
+            this.selectedSourceChanged = false;
             this.updateDirty(false);
             if (refresh) await this.refreshSources(true);
             this.renderDiff();
@@ -2274,6 +2037,7 @@ export class EveryTextLineEditor {
     revert() {
         if (!this.selectedSource) return;
         this.selectedSourceBaseline = this.selectedSource.read();
+        this.selectedSourceChanged = false;
         this.setEditorValue(this.selectedSourceBaseline);
         this.updateDirty(false);
         this.renderDiff();
@@ -2336,7 +2100,7 @@ export class EveryTextLineEditor {
 
     getDiffOriginalValue() {
         if (this.historyCommit?.sourceId === this.selectedSource?.id) return this.historyCommit.content;
-        return this.selectedSource ? this.selectedSource.read() : '';
+        return this.selectedSource ? this.selectedSourceBaseline : '';
     }
 
     getDiffSideLabels() {
@@ -2350,7 +2114,7 @@ export class EveryTextLineEditor {
             };
         }
         return {
-            left: `${sourceLabel} ; Saved baseline (read-only)`,
+            left: `${sourceLabel} ; Current source (read-only)`,
             right: `${sourceLabel} ; Working draft`,
         };
     }
@@ -2409,14 +2173,6 @@ export class EveryTextLineEditor {
 
         this.monacoDiffOriginalModel = monaco.editor.createModel(originalValue, language);
         this.monacoDiffModifiedModel = monaco.editor.createModel(modifiedValue, language);
-        this.monacoDiffOriginalModel.updateOptions({
-            tabSize: this.indentMode.tabSize,
-            insertSpaces: this.indentMode.insertSpaces,
-        });
-        this.monacoDiffModifiedModel.updateOptions({
-            tabSize: this.indentMode.tabSize,
-            insertSpaces: this.indentMode.insertSpaces,
-        });
         this.monacoDiffEditor = monaco.editor.createDiffEditor(this.dom.monacoDiffEditorHost, {
             automaticLayout: true,
             originalEditable: false,
@@ -2425,8 +2181,6 @@ export class EveryTextLineEditor {
             minimap: { enabled: isMonacoMinimapEnabled() },
             scrollBeyondLastLine: false,
             wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
-            tabSize: this.indentMode.tabSize,
-            insertSpaces: this.indentMode.insertSpaces,
         });
         this.applyMonacoMinimapOption();
         this.monacoDiffEditor.setModel({
@@ -2473,18 +2227,6 @@ export class EveryTextLineEditor {
         if (this.monacoDiffModifiedModel) monaco.editor.setModelLanguage(this.monacoDiffModifiedModel, language);
     }
 
-    applyMonacoDiffIndentOptions() {
-        const options = {
-            tabSize: this.indentMode.tabSize,
-            insertSpaces: this.indentMode.insertSpaces,
-        };
-        this.monacoDiffOriginalModel?.updateOptions?.(options);
-        this.monacoDiffModifiedModel?.updateOptions?.(options);
-        this.monacoDiffEditor?.updateOptions?.(options);
-        this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.(options);
-        this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.(options);
-    }
-
     closeMonacoDiff({ syncValue = true } = {}) {
         this.disposeMonacoDiff({ syncValue, clearHost: true });
         this.dom.root?.classList.remove('etle--monacoDiffMode');
@@ -2522,6 +2264,7 @@ export class EveryTextLineEditor {
     updateDirty(isDirty) {
         this.dirty = !!isDirty;
         this.dom.root?.classList.toggle('etle--dirty', this.dirty);
+        this.dom.root?.classList.toggle('etle--sourceChanged', this.selectedSourceChanged);
         this.setUnsavedLock(this.dirty);
         if (this.dom.diff) this.dom.diff.disabled = !this.selectedSource;
         if (this.dom.apply) this.dom.apply.disabled = !this.dirty || this.selectedSource?.readonly;

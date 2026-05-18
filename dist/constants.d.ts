@@ -43,6 +43,9 @@ export declare const LANGUAGES: readonly [{
     readonly id: "yaml";
     readonly label: ".yaml";
 }, {
+    readonly id: "css";
+    readonly label: ".css";
+}, {
     readonly id: "text";
     readonly label: "text";
 }];

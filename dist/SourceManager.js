@@ -1,7 +1,7 @@
 // @ts-ignore
 import { oai_settings, promptManager, openai_setting_names } from '../../../../openai.js';
 // @ts-ignore
-import { power_user, context_presets } from '../../../../power-user.js';
+import { power_user, context_presets, getThemeObject } from '../../../../power-user.js';
 // @ts-ignore
 import { selectContextPreset, selectInstructPreset, instruct_presets } from '../../../../instruct-mode.js';
 // @ts-ignore
@@ -15,7 +15,7 @@ import { textgenerationwebui_preset_names, textgenerationwebui_settings } from '
 // @ts-ignore
 import { extension_settings } from '../../../../extensions.js';
 // @ts-ignore
-import { saveSettingsDebounced } from '../../../../../script.js';
+import { getRequestHeaders, saveSettingsDebounced } from '../../../../../script.js';
 import { diffLines } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 const GROUP_ORDER = {
@@ -27,8 +27,9 @@ const GROUP_ORDER = {
     'Power User Context': 60,
     'Power User Instruct': 70,
     'System Prompt': 80,
-    'Connection Profiles': 90,
-    'Personas': 100,
+    'Power User Customization': 90,
+    'Connection Profiles': 100,
+    'Personas': 110,
 };
 export const getCollapsedGroups = () => {
     try {
@@ -151,6 +152,131 @@ const makeObjectFieldSource = ({ id, label, group, object, property, selector = 
         save: () => saveSettingsDebounced(),
     };
 };
+const applyCustomCss = (value) => {
+    let style = document.getElementById('custom-style');
+    if (!style) {
+        style = document.createElement('style');
+        style.type = 'text/css';
+        style.id = 'custom-style';
+        document.head.append(style);
+    }
+    style.innerHTML = value;
+};
+const getThemeBranches = () => {
+    const themes = Array.from(document.querySelectorAll('#themes option'))
+        .map(option => option.value || option.textContent || '')
+        .filter(Boolean);
+    const current = power_user?.theme;
+    if (current && !themes.includes(current))
+        themes.unshift(current);
+    return themes;
+};
+const getThemeBranchManager = () => ({
+    getBranches: getThemeBranches,
+    getCurrentBranch: () => power_user?.theme ?? 'Default',
+    switchBranch: async (branchName) => {
+        const select = document.querySelector('#themes');
+        if (select) {
+            select.value = branchName;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        else if (power_user) {
+            power_user.theme = branchName;
+            saveSettingsDebounced();
+        }
+    },
+});
+const ensureThemeOption = (themeName) => {
+    const select = document.querySelector('#themes');
+    if (!select)
+        return;
+    let option = Array.from(select.options).find(item => item.value === themeName);
+    if (!option) {
+        option = document.createElement('option');
+        option.value = themeName;
+        option.textContent = themeName;
+        select.append(option);
+    }
+    select.value = themeName;
+};
+const saveThemeJson = async (theme) => {
+    const response = await fetch('/api/themes/save', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        body: JSON.stringify(theme),
+    });
+    if (!response.ok) {
+        throw new Error(`Theme could not be saved (${response.status}).`);
+    }
+};
+const makeThemeJsonSource = () => {
+    const branchManager = getThemeBranchManager();
+    const themeName = branchManager.getCurrentBranch();
+    let pendingTheme = null;
+    return {
+        id: `power_user:theme_json@${themeName}`,
+        label: 'Theme JSON',
+        group: 'Power User Customization',
+        groupOrder: GROUP_ORDER['Power User Customization'],
+        order: 5,
+        readonly: false,
+        branchManager,
+        read: () => JSON.stringify(getThemeObject(themeName), null, 2),
+        write: (value) => {
+            const parsed = JSON.parse(value);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                throw new Error('Theme JSON must be an object.');
+            }
+            if (typeof parsed.name !== 'string' || !parsed.name.trim()) {
+                throw new Error('Theme JSON must include a non-empty "name".');
+            }
+            pendingTheme = parsed;
+        },
+        save: async () => {
+            const theme = pendingTheme ?? getThemeObject(themeName);
+            const nextThemeName = String(theme.name);
+            await saveThemeJson(theme);
+            ensureThemeOption(nextThemeName);
+            if (power_user) {
+                Object.assign(power_user, theme);
+                power_user.theme = nextThemeName;
+            }
+            if (typeof theme.custom_css === 'string')
+                applyCustomCss(theme.custom_css);
+            saveSettingsDebounced();
+            pendingTheme = null;
+        },
+        meta: `Theme preset: ${themeName}`,
+    };
+};
+const makeCustomCssSource = () => ({
+    id: 'power_user:custom_css',
+    label: 'Custom CSS',
+    group: 'Power User Customization',
+    groupOrder: GROUP_ORDER['Power User Customization'],
+    order: 10,
+    readonly: false,
+    branchManager: getThemeBranchManager(),
+    read: () => String(power_user?.custom_css ?? ''),
+    write: (value) => {
+        power_user.custom_css = value;
+        const field = document.querySelector('#customCSS');
+        if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
+            field.value = value;
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        else {
+            applyCustomCss(value);
+            saveSettingsDebounced();
+        }
+    },
+    save: () => {
+        applyCustomCss(String(power_user?.custom_css ?? ''));
+        saveSettingsDebounced();
+    },
+    meta: 'Power User Custom CSS',
+});
 const getSystemPromptFieldSelector = (property) => {
     switch (property) {
         case 'content':
@@ -291,6 +417,16 @@ const makeConnectionProfileSource = (profile) => {
         },
         save: () => saveSettingsDebounced(),
         meta: 'Connection Manager profile JSON',
+    };
+};
+const getWorldInfoEntry = async (worldName, uid) => {
+    const freshData = await loadWorldInfo(worldName);
+    const entries = Array.isArray(freshData?.entries)
+        ? freshData.entries.map((entry) => [entry?.uid, entry])
+        : Object.entries(freshData?.entries ?? {});
+    return {
+        data: freshData,
+        entry: entries.find(([entryKey, entry]) => String(entry?.uid ?? entryKey) === String(uid))?.[1],
     };
 };
 const getBranchManager = (group) => {
@@ -603,6 +739,10 @@ export const getSources = async () => {
             sources.push(makeSystemPromptFieldSource(property, label));
         }
     }
+    if (typeof power_user?.custom_css === 'string') {
+        sources.push(makeThemeJsonSource());
+        sources.push(makeCustomCssSource());
+    }
     if (typeof power_user?.persona_description === 'string') {
         sources.push(makeObjectFieldSource({
             id: 'power_user:persona_description',
@@ -643,43 +783,73 @@ export const getSources = async () => {
                 console.warn(`[${NAME}] Could not load world info "${worldName}"`, error);
                 continue;
             }
-            const entries = Array.isArray(data?.entries) ? data.entries : [];
-            for (const entry of entries) {
-                if (!entry || typeof entry.content !== 'string')
+            const entries = Array.isArray(data?.entries)
+                ? data.entries.map((entry) => [entry?.uid, entry])
+                : Object.entries(data?.entries ?? {});
+            let editableEntryCount = 0;
+            for (const [entryKey, entry] of entries) {
+                if (!entry || typeof entry !== 'object')
                     continue;
+                editableEntryCount += 1;
+                const uid = entry.uid ?? entryKey;
                 const title = entry.comment || entry.memo || entry.key?.join(', ') || `Entry ${entry.uid}`;
+                let activeData = data;
+                let activeEntry = entry;
+                const refreshEntry = async () => {
+                    const fresh = await getWorldInfoEntry(worldName, uid);
+                    if (!fresh.entry)
+                        throw new Error(`World entry ${uid} was not found in "${worldName}".`);
+                    activeData = fresh.data;
+                    activeEntry = fresh.entry;
+                    return activeEntry;
+                };
                 sources.push({
-                    id: `world:${worldName}:${entry.uid}:content`,
+                    id: `world:${worldName}:${uid}:content`,
                     label: title,
                     group: `World/Lorebook: ${worldName}`,
                     readonly: false,
-                    read: () => String(entry.content ?? ''),
+                    read: () => String(activeEntry.content ?? ''),
+                    readFresh: async () => String((await refreshEntry()).content ?? ''),
                     write: (text) => {
-                        entry.content = text;
+                        activeEntry.content = text;
                     },
                     save: async () => {
-                        await saveWorldInfo(worldName, data, true);
+                        await saveWorldInfo(worldName, activeData, true);
                         reloadEditor(worldName, true);
                     },
-                    meta: `World entry ${entry.uid}`,
+                    meta: `World entry ${uid}`,
                     metadata: {
                         name: {
-                            get: () => entry.comment || entry.memo || '',
+                            get: () => activeEntry.comment || activeEntry.memo || '',
                             set: async (v) => {
-                                entry.comment = v;
-                                await saveWorldInfo(worldName, data, true);
+                                activeEntry.comment = v;
+                                await saveWorldInfo(worldName, activeData, true);
                                 reloadEditor(worldName, true);
                             }
                         },
                         triggers: {
-                            get: () => Array.isArray(entry.key) ? entry.key.join(', ') : '',
+                            get: () => Array.isArray(activeEntry.key) ? activeEntry.key.join(', ') : '',
                             set: async (v) => {
-                                entry.key = v.split(',').map(s => s.trim()).filter(Boolean);
-                                await saveWorldInfo(worldName, data, true);
+                                activeEntry.key = v.split(',').map(s => s.trim()).filter(Boolean);
+                                await saveWorldInfo(worldName, activeData, true);
                                 reloadEditor(worldName, true);
                             }
                         }
                     }
+                });
+            }
+            if (!editableEntryCount) {
+                sources.push({
+                    id: `world:${worldName}:placeholder`,
+                    label: 'No editable entries',
+                    group: `World/Lorebook: ${worldName}`,
+                    readonly: true,
+                    selectable: false,
+                    placeholder: true,
+                    read: () => '',
+                    write: () => { },
+                    save: () => { },
+                    meta: 'Lorebook has no editable entry content',
                 });
             }
         }

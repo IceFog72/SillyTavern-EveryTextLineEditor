@@ -79,6 +79,7 @@ export interface TextSource {
     branchManager?: BranchManager;
     meta?: string;
     read: () => string;
+    readFresh?: () => string | Promise<string>;
     write: (value: string) => void;
     save: () => void | Promise<void>;
     metadata?: {
@@ -176,6 +177,7 @@ export interface DomRefs {
     statusSpellCheck?: HTMLButtonElement;
     statusMinimap?: HTMLButtonElement;
     statusLanguage?: HTMLButtonElement;
+    statusLanguageMenu?: HTMLDivElement;
     statusEngine?: HTMLButtonElement;
     statusScrollSync?: HTMLButtonElement;
     editorEngine?: HTMLSelectElement;

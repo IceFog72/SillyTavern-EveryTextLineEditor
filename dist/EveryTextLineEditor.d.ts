@@ -2,6 +2,7 @@ import { MonacoSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es
 import './vendor/prism-code-editor/grammars/yaml.js';
 import './vendor/prism-code-editor/grammars/markdown.js';
 import './vendor/prism-code-editor/grammars/json.js';
+import './vendor/prism-code-editor/grammars/css.js';
 import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
@@ -17,6 +18,7 @@ export declare class EveryTextLineEditor {
     sources: TextSource[];
     selectedSource: TextSource | null;
     selectedSourceBaseline: string;
+    selectedSourceChanged: boolean;
     dirty: boolean;
     collapsedGroups: Set<string>;
     currentLanguage: Language;
@@ -51,6 +53,8 @@ export declare class EveryTextLineEditor {
     sourceLanguages: Record<string, string>;
     suppressEditorChange: boolean;
     trackedSourceGroups: Set<string>;
+    sourceWatchTimer: number | null;
+    sourceWatchInFlight: boolean;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -91,12 +95,6 @@ export declare class EveryTextLineEditor {
     setTrackedSourceGroups(groups: string[]): Promise<void>;
     clearSelectedSource(title: string, detail: string): void;
     openSourceControlDialog(): void;
-    getTreeGroupForSource(source: TextSource): {
-        key: string;
-        label: string;
-        branchName: string;
-    };
-    getTreeBranchScopeLabel(source: TextSource): string;
     getLanguageForSource(source?: TextSource | null): Language;
     guessLanguageForSource(source: TextSource): Language;
     setSourceLanguage(source: TextSource, lang: Language): void;
@@ -109,6 +107,9 @@ export declare class EveryTextLineEditor {
     withSuppressedEditorChange(callback: () => void): void;
     isValueDirty(value: any): boolean;
     isCurrentEditorDirty(): boolean;
+    startSourceWatcher(): void;
+    stopSourceWatcher(): void;
+    refreshSelectedSourceBaseline(): Promise<void>;
     setWordWrap(enabled: any): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
@@ -128,8 +129,12 @@ export declare class EveryTextLineEditor {
     }>;
     shouldIgnoreSpellWord(word: string): boolean;
     cycleIndentMode(): void;
-    cycleLanguage(): void;
+    setIndentMode(mode: IndentMode): void;
     setLanguage(lang: Language): void;
+    toggleLanguageMenu(): void;
+    openLanguageMenu(): void;
+    positionLanguageMenu(): void;
+    closeLanguageMenu(): void;
     cycleScrollSync(): void;
     setScrollSync(mode: SyncMode): void;
     getCursorPosition(): {
@@ -164,11 +169,10 @@ export declare class EveryTextLineEditor {
     highlightDiff(diff: any): void;
     applyDiffMarks(editor: any, marks: any, activeMark: any): void;
     getCurrentEditorValue(): any;
-    getMonacoLanguageId(): "markdown" | "json" | "yaml" | "plaintext";
+    getMonacoLanguageId(): "markdown" | "json" | "yaml" | "css" | "plaintext";
     openMonacoDiff(): Promise<void>;
     updateMonacoDiffModels(): void;
     setMonacoDiffLanguage(): void;
-    applyMonacoDiffIndentOptions(): void;
     closeMonacoDiff({ syncValue }?: {
         syncValue?: boolean;
     }): void;

@@ -17,6 +17,12 @@
     overflow: hidden;
 }
 
+#etle--panel select,
+#etle--panel input {
+    font: inherit;
+    letter-spacing: 0;
+}
+
 .etle--shell {
     flex: 1;
     min-height: 0;
@@ -95,54 +101,63 @@
 }
 
 .etle--sidebarTabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     flex-shrink: 0;
-    gap: 2px;
-    background: color-mix(in srgb, var(--SmartThemeBodyColor), transparent 82%);
+    gap: 0.25rem;
+    padding: 0.4rem 0.45rem 0;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 84%, black 16%);
     border-bottom: 1px solid var(--SmartThemeBorderColor);
 }
 
-.etle--sidebarTab {
+#etle--panel .etle--sidebarTab {
     flex: 1 1 0;
     min-width: 0;
+    width: 100%;
+    height: 2.25rem;
+    min-height: 2.25rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 7px 14px;
-    border: 1px solid transparent;
-    border-bottom: none;
-    border-radius: 6px 6px 0 0;
-    background: transparent;
+    gap: 0.35rem;
+    margin: 0 !important;
+    padding: 0 0.45rem !important;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 58%, transparent) !important;
+    border-bottom: 0 !important;
+    border-radius: 5px 5px 0 0 !important;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 74%, black 26%) !important;
     color: var(--SmartThemeItalicColor, var(--SmartThemeEmColor));
     font-size: 0.82rem;
-    font-weight: 500;
+    font-weight: 600;
+    line-height: 1;
     cursor: pointer;
     white-space: nowrap;
     position: relative;
     bottom: -1px;
-    min-height: 2rem;
-    margin: unset !important;
+    outline: 0;
+    box-shadow: none;
 }
 
-.etle--sidebarTab:hover:not(.etle--activeTab) {
-    background: color-mix(in srgb, var(--SmartThemeBodyColor), white 8%);
+#etle--panel .etle--sidebarTab:hover:not(.etle--activeTab) {
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 66%, var(--SmartThemeQuoteColor) 18%) !important;
     color: var(--SmartThemeBodyColor);
 }
 
-.etle--sidebarTab.etle--activeTab {
-    background: var(--SmartThemeBlurTintColor);
-    border-color: var(--SmartThemeBorderColor);
-    color: var(--SmartThemeQuoteColor);
-    font-weight: 600;
+#etle--panel .etle--sidebarTab.etle--activeTab {
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 92%, black 8%) !important;
+    border-color: var(--SmartThemeQuoteColor) !important;
+    color: var(--SmartThemeBodyColor);
+    font-weight: 700;
 }
 
-.etle--sidebarTab span:first-child {
+#etle--panel .etle--sidebarTab span:first-child {
     font-size: 0.9em;
-    opacity: 0.85;
+    opacity: 0.82;
+    font-family: var(--fa-style-family, "Font Awesome 6 Free", "Font Awesome 5 Free");
+    font-weight: 900;
 }
 
-.etle--sidebarTab span:last-child {
+#etle--panel .etle--sidebarTab span:last-child {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -676,12 +691,47 @@
     background: color-mix(in srgb, var(--SmartThemeQuoteColor) 24%, transparent);
 }
 
+.etle--statusDropup {
+    position: fixed;
+    z-index: 50000;
+    min-width: 5.5rem;
+    padding: 0.25rem;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, black 14%);
+    box-shadow: 0 0.4rem 1.2rem rgba(0, 0, 0, 0.35);
+}
+
+.etle--statusDropupItem {
+    width: 100%;
+    min-height: 1.65rem;
+    display: flex;
+    align-items: center;
+    padding: 0 0.45rem;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--SmartThemeBodyColor);
+    text-align: left;
+    cursor: pointer;
+    letter-spacing: 0;
+}
+
+.etle--statusDropupItem:hover,
+.etle--statusDropupItem.etle--active {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 26%, transparent);
+}
+
 .etle--dirtyStatus {
     color: var(--SmartThemeBodyColor);
 }
 
 .etle--dirtyStatus.etle--statusDirty {
     color: #ffcc66;
+}
+
+.etle--dirtyStatus.etle--statusSourceChanged {
+    color: #8fd3ff;
 }
 
 .etle--workspace {
@@ -848,6 +898,17 @@
 .etle--dirty .etle--current h3::after {
     content: ' *';
     color: var(--SmartThemeQuoteColor);
+}
+
+.etle--sourceChanged .etle--current h3::after {
+    content: ' source changed';
+    color: #8fd3ff;
+    font-size: 0.72em;
+    font-weight: 600;
+}
+
+.etle--sourceChanged.etle--dirty .etle--current h3::after {
+    content: ' source changed *';
 }
 
 .etle--empty {
@@ -1136,14 +1197,22 @@
     color: var(--SmartThemeBodyColor);
 }
 
-.etle--settingsHead {
-    padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 20%, transparent);
+#etle--panel .etle--settingsHead {
+    margin: 0.55rem 0.55rem 0;
+    padding: 0.42rem 0.6rem;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 55%, transparent);
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 86%, black 14%);
+    box-shadow: none;
 }
 
-.etle--settingsHead h4 {
-    margin: 0;
+#etle--panel .etle--settingsHead h4 {
+    margin: 0 !important;
+    color: var(--SmartThemeBodyColor);
     font-size: 0.92rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: 0;
 }
 
 .etle--settingsBody {

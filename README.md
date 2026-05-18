@@ -1,18 +1,108 @@
-# SillyTavern-EveryTextLineEditor
+# SillyTavern - Every Text Line Editor
 
-An in-SillyTavern prompt and text source editor.
+An in-SillyTavern editor for prompts, preset text, lorebook entries, personas, connection profiles, and other text sources that are normally scattered across different menus.
 
-## Development
+---
 
-The editable source lives in `src/index.ts`. SillyTavern loads the compiled ES module from `dist/index.js`.
+## Features
+
+* Central source list: choose which prompt/source categories stay visible
+* Lorebook support: add whole lorebooks and edit entries from the same editor
+* Prism and Monaco editors: switch between a lightweight editor and Monaco
+* Diff mode: compare the current working draft with the saved baseline or history snapshots
+* Source history: save local snapshots, compare changed sources, and load older versions
+* Syntax selection: choose Markdown, JSON, YAML, or plain text per source
+* Word wrap, spell check, minimap, and scroll-sync controls
+* Prompt controls: toggle enabled prompts and edit supported prompt metadata
+* Local-first storage: history is stored in browser IndexedDB
+
+---
+
+## Installation
+
+1. Install via SillyTavern's extension installer, or
+2. Clone into `SillyTavern/data/default-user/extensions/`
 
 ```bash
-npm install
-npm run build
+git clone https://github.com/IceFog72/SillyTavern-EveryTextLineEditor
 ```
 
-Useful scripts:
+Then reload SillyTavern and enable **Every Text Line Editor**.
 
-- `npm run build` emits `dist/index.js`, related module files, source maps, and the local Prism vendor copy under `dist/vendor/prism-code-editor`.
-- `npm run check` runs TypeScript without emitting files.
-- `npm run watch` rebuilds while editing.
+---
+
+## Requirements
+
+* SillyTavern `1.12.0` or newer
+* Modern Chromium/Firefox-based browser
+
+
+---
+
+## Quick Start
+
+### Basic Usage
+
+1. Open **Every Text Line Editor** from the extensions panel.
+2. Click **Sources -> Control**.
+3. Select the categories or lorebooks you want in the source list.
+4. Pick a source from the sidebar.
+5. Edit the text, then click **Apply** to save back to SillyTavern.
+
+### Diff and History
+
+1. Click **Diff** to compare your draft against the saved baseline.
+2. Use **History** to commit snapshots for a source or category.
+3. Load or compare previous snapshots when experimenting with prompt changes.
+
+---
+
+## Editor Notes
+
+* **Prism** is the default lightweight editor.
+* **Monaco** is available for users who prefer a full code-editor feel.
+* Indentation settings apply to Prism only.
+* Monaco minimap is hidden while Monaco diff mode is open.
+* Language selection is per source and available from the status bar.
+
+---
+
+## Project Structure
+
+```text
+SillyTavern-EveryTextLineEditor/
+├── index.js                  # SillyTavern entry shim
+├── manifest.json             # Extension manifest
+├── style.css                 # Extension UI and editor styling
+├── src/
+│   ├── EveryTextLineEditor.ts # Main editor shell and editor adapters
+│   ├── SourceManager.ts      # SillyTavern source discovery and save logic
+│   ├── SourcePanel.ts        # Source tree and source control dialog
+│   ├── SettingsPanel.ts      # Settings UI
+│   ├── HistoryPanel.ts       # History sidebar UI
+│   ├── HistoryStore.ts       # IndexedDB snapshot storage
+│   ├── constants.ts          # Storage keys and option lists
+│   └── types.ts              # Shared TypeScript types
+└── dist/                     # Compiled runtime files loaded by SillyTavern
+```
+
+---
+
+
+## Support
+
+- **Discord**: [https://discord.gg/2tJcWeMjFQ](https://discord.gg/2tJcWeMjFQ)
+- **SillyTavern Discord**: Find me on the official server
+- **GitHub Issues**: Bug reports and feature requests
+
+---
+
+## Support Development
+
+[Patreon](https://www.patreon.com/cw/IceFog72)
+
+---
+
+## License
+
+GNU License - See [LICENSE](LICENSE) for details.

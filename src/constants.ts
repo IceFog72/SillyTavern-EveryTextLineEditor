@@ -32,6 +32,7 @@ export const LANGUAGES = [
     { id: 'markdown', label: '.md' },
     { id: 'json', label: '.json' },
     { id: 'yaml', label: '.yaml' },
+    { id: 'css', label: '.css' },
     { id: 'text', label: 'text' },
 ] as const;
 
