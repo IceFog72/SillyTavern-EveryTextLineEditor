@@ -48,7 +48,7 @@ Then reload SillyTavern and enable **Every Text Line Editor**.
 
 ### Basic Usage
 
-1. Open **Every Text Line Editor** from the extensions panel.
+1. Open **Every Text Line Editor** from the top panel.
 2. Click **Sources -> Control**.
 3. Select the categories or lorebooks you want in the source list.
 4. Pick a source from the sidebar.
