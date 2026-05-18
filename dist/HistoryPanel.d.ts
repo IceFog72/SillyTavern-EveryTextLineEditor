@@ -14,6 +14,7 @@ export declare class HistoryPanel {
     constructor(container: HTMLElement, delegate: HistoryPanelDelegate);
     render(activeGroup: string, allGroups: string[], allSources: TextSource[], commits: HistoryCommit[], changedSources: ChangedSource[]): void;
     private groupCommits;
+    private getVisibleSourceGroups;
     private renderFileRow;
     private getSourceKind;
     private createAutoMessage;

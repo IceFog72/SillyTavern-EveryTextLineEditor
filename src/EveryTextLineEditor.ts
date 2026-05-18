@@ -2334,7 +2334,7 @@ export class EveryTextLineEditor {
             return;
         }
 
-        const allGroups = Array.from(new Set(this.sources.map(s => s.group))).sort();
+        const sourceTabGroups = Array.from(new Set(this.getTrackedSources().map(source => source.group))).sort();
         const groupSources = this.sources.filter(s => s.group === activeGroup);
         const scope = this.getHistoryScope(groupSources[0] ?? this.selectedSource ?? undefined);
         
@@ -2359,7 +2359,7 @@ export class EveryTextLineEditor {
 
         const finalCommits = await this.historyStore.listCommitsByScope(scope.scopeId, 200);
 
-        this.historyPanel.render(activeGroup, allGroups, this.sources, finalCommits, changedSources);
+        this.historyPanel.render(activeGroup, sourceTabGroups, this.sources, finalCommits, changedSources);
     }
 
     async diffHistoryCommit(commit: HistoryCommit) {

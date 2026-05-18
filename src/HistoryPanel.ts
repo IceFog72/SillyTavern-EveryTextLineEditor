@@ -44,7 +44,7 @@ export class HistoryPanel {
         const select = document.createElement('select');
         select.classList.add('menu_button', 'etle--historySourceSelect');
         
-        for (const group of allGroups) {
+        for (const group of this.getVisibleSourceGroups(activeGroup, allGroups, commits)) {
             const option = document.createElement('option');
             option.value = group;
             option.textContent = group;
@@ -183,6 +183,17 @@ export class HistoryPanel {
         }
 
         return [...groups.values()].sort((a, b) => b.createdAt - a.createdAt);
+    }
+
+    private getVisibleSourceGroups(activeGroup: string, allGroups: string[], commits: HistoryCommit[]): string[] {
+        const commitGroups = new Set(commits.map(commit => commit.sourceGroup).filter((group): group is string => !!group));
+        const visibleGroups = new Set<string>();
+
+        if (activeGroup) visibleGroups.add(activeGroup);
+        for (const group of allGroups) visibleGroups.add(group);
+        for (const group of commitGroups) visibleGroups.add(group);
+
+        return [...visibleGroups];
     }
 
     private renderFileRow(source: TextSource, status: string, commit?: HistoryCommit) {

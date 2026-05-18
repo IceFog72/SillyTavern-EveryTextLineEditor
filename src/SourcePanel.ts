@@ -116,7 +116,7 @@ export function openSourceControlDialog(host: SourcePanelHost) {
         toggleSelected.classList.toggle('fa-eye');
         toggleSelected.classList.toggle('fa-eye-slash');
         toggleSelected.classList.toggle('etle--active');
-        filterAllRows(dialog, showOnlySelected);
+        applySourceControlFilters(dialog, showOnlySelected);
     });
     header.append(title, toggleSelected);
     shell.append(header);
@@ -134,9 +134,9 @@ export function openSourceControlDialog(host: SourcePanelHost) {
         const categories = availableGroups.filter(([group]) => !isLorebookGroup(group) && !isCardGroup(group));
         const lorebooks = availableGroups.filter(([group]) => isLorebookGroup(group));
         const cards = availableGroups.filter(([group]) => isCardGroup(group));
-        appendSourceControlColumn(host, columns, 'Categories', categories, (group, count) => `${group} (${count})`, false);
-        appendSourceControlColumn(host, columns, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`, true);
-        appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true);
+        appendSourceControlColumn(host, columns, 'Categories', categories, (group, count) => `${group} (${count})`, false, () => applySourceControlFilters(dialog, showOnlySelected));
+        appendSourceControlColumn(host, columns, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected));
+        appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected));
     }
 
     const actions = document.createElement('div');
@@ -222,6 +222,7 @@ function appendSourceControlColumn(
     groups: Array<[string, number]>,
     formatLabel: (group: string, count: number) => string,
     searchable = false,
+    onFilter?: () => void,
 ) {
     const column = document.createElement('section');
     column.classList.add('etle--sourceDialogColumn');
@@ -234,7 +235,7 @@ function appendSourceControlColumn(
         search.type = 'search';
         search.placeholder = `Search ${title.toLowerCase()}`;
         search.classList.add('etle--sourceDialogSearch');
-        search.addEventListener('input', () => filterSourceControlColumn(column, search.value));
+        search.addEventListener('input', () => onFilter?.());
         column.append(search);
     }
     if (!groups.length) {
@@ -261,37 +262,30 @@ function appendSourceControlColumn(
     columns.append(column);
 }
 
-function filterAllRows(dialog: HTMLDialogElement, showOnlySelected: boolean) {
-    dialog.querySelectorAll<HTMLElement>('.etle--sourceDialogRow').forEach(row => {
-        const checkbox = row.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        if (showOnlySelected) {
-            row.hidden = !checkbox?.checked;
-        } else {
-            row.hidden = false;
+function applySourceControlFilters(dialog: HTMLDialogElement, showOnlySelected: boolean) {
+    dialog.querySelectorAll<HTMLElement>('.etle--sourceDialogColumn').forEach(column => {
+        const query = column.querySelector<HTMLInputElement>('.etle--sourceDialogSearch')?.value.trim().toLowerCase() ?? '';
+        let visible = 0;
+
+        column.querySelectorAll<HTMLElement>('.etle--sourceDialogRow').forEach(row => {
+            const checkbox = row.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const matchesSearch = !query || String(row.dataset.filterText ?? '').includes(query);
+            const matchesSelected = !showOnlySelected || !!checkbox?.checked;
+            const show = matchesSearch && matchesSelected;
+            row.hidden = !show;
+            if (show) visible++;
+        });
+
+        let empty = column.querySelector<HTMLElement>('.etle--sourceDialogEmptyFilter');
+        if (!empty) {
+            empty = document.createElement('div');
+            empty.classList.add('etle--empty', 'etle--sourceDialogEmptyFilter');
+            empty.textContent = 'No matches.';
+            column.append(empty);
         }
+        empty.hidden = !!visible;
+        column.classList.toggle('etle--sourceDialogColumnEmpty', !visible);
     });
-}
-
-function filterSourceControlColumn(column: HTMLElement, query: string) {
-    const value = query.trim().toLowerCase();
-    let visible = 0;
-
-    // Hide/show rows based on filter match
-    column.querySelectorAll<HTMLElement>('.etle--sourceDialogRow').forEach(row => {
-        const match = !value || String(row.dataset.filterText ?? '').includes(value);
-        row.hidden = !match;
-        if (match) visible++;
-    });
-
-    let empty = column.querySelector<HTMLElement>('.etle--sourceDialogEmptyFilter');
-    if (!empty) {
-        empty = document.createElement('div');
-        empty.classList.add('etle--empty', 'etle--sourceDialogEmptyFilter');
-        empty.textContent = 'No matches.';
-        column.append(empty);
-    }
-    empty.hidden = !!visible;
-    column.classList.toggle('etle--sourceDialogColumnEmpty', !visible);
 }
 
 function getTreeGroupForSource(source: TextSource) {
