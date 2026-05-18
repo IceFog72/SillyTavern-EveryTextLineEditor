@@ -2,6 +2,10 @@
 
 An in-SillyTavern editor for prompts, preset text, lorebook entries, personas, connection profiles, and other text sources that are normally scattered across different menus.
 
+
+<img width="2560" height="1402" alt="image" src="https://github.com/user-attachments/assets/797c479d-7502-4b38-8a5c-0cb44d0d3857" />
+
+*You don't need to use [ProbablyTooManyTabs](https://github.com/IceFog72/SillyTavern-ProbablyTooManyTabs) to use EveryTextLineEditor
 ---
 
 ## Features
