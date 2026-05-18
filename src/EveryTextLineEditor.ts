@@ -976,7 +976,7 @@ export class EveryTextLineEditor {
             model,
             readOnly,
             automaticLayout: true,
-            minimap: { enabled: this.isMonacoMinimapEffectivelyEnabled() },
+            minimap: { enabled: isMonacoMinimapEnabled() && !(this.diffOpen && this.dom.root?.classList.contains('etle--monacoDiffMode')) },
             lineNumbers: 'on',
             scrollBeyondLastLine: false,
             wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
