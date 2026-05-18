@@ -544,6 +544,15 @@ const getWorldInfoEntry = async (worldName, uid) => {
         entry: entries.find(([entryKey, entry]) => String(entry?.uid ?? entryKey) === String(uid))?.[1],
     };
 };
+const getWorldInfoEntryTitle = (entry, uid) => {
+    if (entry.comment)
+        return String(entry.comment);
+    if (entry.memo)
+        return String(entry.memo);
+    if (Array.isArray(entry.key))
+        return entry.key.join(', ');
+    return `Entry ${uid}`;
+};
 const getBranchManager = (group) => {
     switch (group) {
         case 'Chat Completion Prompts':
@@ -922,7 +931,7 @@ export const getSources = async () => {
                     continue;
                 editableEntryCount += 1;
                 const uid = entry.uid ?? entryKey;
-                const title = entry.comment || entry.memo || entry.key?.join(', ') || `Entry ${entry.uid}`;
+                const title = getWorldInfoEntryTitle(entry, uid);
                 let activeData = data;
                 let activeEntry = entry;
                 const refreshEntry = async () => {

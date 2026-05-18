@@ -611,6 +611,13 @@ const getWorldInfoEntry = async (worldName: string, uid: string | number) => {
     };
 };
 
+const getWorldInfoEntryTitle = (entry: Record<string, any>, uid: string | number): string => {
+    if (entry.comment) return String(entry.comment);
+    if (entry.memo) return String(entry.memo);
+    if (Array.isArray(entry.key)) return entry.key.join(', ');
+    return `Entry ${uid}`;
+};
+
 const getBranchManager = (group: string): BranchManager | undefined => {
     switch (group) {
         case 'Chat Completion Prompts':
@@ -994,7 +1001,7 @@ export const getSources = async (): Promise<TextSource[]> => {
                 if (!entry || typeof entry !== 'object') continue;
                 editableEntryCount += 1;
                 const uid = entry.uid ?? entryKey;
-                const title = entry.comment || entry.memo || entry.key?.join(', ') || `Entry ${entry.uid}`;
+                const title = getWorldInfoEntryTitle(entry, uid);
                 let activeData = data;
                 let activeEntry = entry;
                 const refreshEntry = async () => {
