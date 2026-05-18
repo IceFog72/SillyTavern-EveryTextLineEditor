@@ -379,9 +379,16 @@ export class EveryTextLineEditor {
         sourcesToolbar.classList.add('etle--sourcesToolbar');
         const addSource = this.makeTextButton('Control', 'fa-filter', () => this.openSourceControlDialog());
         this.dom.addSource = addSource;
+        const sourceSearch = document.createElement('input');
+        this.dom.sourceSearch = sourceSearch;
+        sourceSearch.classList.add('etle--sourceSearch');
+        sourceSearch.type = 'search';
+        sourceSearch.placeholder = 'Filter sources';
+        sourceSearch.addEventListener('input', () => this.renderTree());
         const tree = document.createElement('div');
         this.dom.tree = tree;
         tree.classList.add('etle--tree');
+        sourcesPanel.append(sourceSearch);
         sourcesPanel.append(tree);
         sourcesToolbar.append(addSource);
         sourcesPanel.append(sourcesToolbar);
@@ -1293,6 +1300,7 @@ export class EveryTextLineEditor {
         const label = source.label.toLowerCase();
         if (id.includes('custom_css') || label.includes('css')) return cssLanguage;
         if (source.group.includes('Connection Profiles')) return jsonLanguage;
+        if (source.group.includes('Character Card') && label.includes('json')) return jsonLanguage;
         if (id.includes('custom_include_body') || id.includes('custom_exclude_body') || id.includes('custom_include_headers')) return jsonLanguage;
         if (label.includes('json')) return jsonLanguage;
         if (label.includes('grammar') || label.includes('tokens')) return textLanguage;

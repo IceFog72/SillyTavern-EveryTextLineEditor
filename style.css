@@ -917,7 +917,7 @@
 }
 
 .etle--sourceDialog {
-    width: min(42rem, calc(100vw - 2rem));
+    width: min(68rem, calc(100vw - 2rem));
     max-height: min(42rem, calc(100dvh - 2rem));
     padding: 0;
     border: 1px solid var(--SmartThemeBorderColor);
@@ -943,8 +943,83 @@
     font-size: 1rem;
 }
 
-.etle--sourceDialogList {
+.etle--sourceDialogHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.etle--sourceDialogHeader h3 {
+    flex: 1;
+    margin: 0;
+    font-size: 1rem;
+}
+
+.etle--sourceDialogToggle {
+    padding: 0.35rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 80%, transparent) !important;
+    border-radius: 4px !important;
+    background: transparent !important;
+    color: var(--SmartThemeBodyColor) !important;
+    cursor: pointer;
+    font-size: 0.9rem;
+    min-width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.etle--sourceDialogToggle:hover {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent) !important;
+}
+
+.etle--sourceDialogToggle.etle--active {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 35%, transparent) !important;
+    border-color: var(--SmartThemeBodyColor) !important;
+}
+
+/* Ensure hidden attribute works */
+.etle--sourceDialog [hidden] {
+    display: none !important;
+}
+
+.etle--sourceSearch,
+.etle--sourceDialogSearch {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    width: 100%;
+    min-height: 2rem;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 80%, transparent) !important;
+    border-radius: 6px !important;
+    background: color-mix(in srgb, var(--SmartThemeBlurTintColor) 72%, black 28%) !important;
+    color: var(--SmartThemeBodyColor) !important;
+    box-shadow: none !important;
+}
+
+.etle--sourceDialogSearch {
+    width: calc(100% - 0.7rem);
+    margin: 0.35rem;
+}
+
+.etle--sourceSearch {
+    margin: 0.45rem 0.45rem 0;
+    width: calc(100% - 0.9rem);
+}
+
+.etle--sourceDialogColumns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
     max-height: min(30rem, calc(100dvh - 10rem));
+    min-height: min(22rem, calc(100dvh - 14rem));
+}
+
+.etle--sourceDialogColumn {
+    min-width: 0;
     overflow: auto;
     border: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 75%, transparent);
     border-radius: 6px;
@@ -959,6 +1034,10 @@
     font-weight: 700;
     text-transform: uppercase;
     opacity: 0.8;
+}
+
+.etle--sourceDialogColumnEmpty {
+    opacity: 0.65;
 }
 
 .etle--sourceDialogRow {
@@ -983,6 +1062,12 @@
     display: flex;
     justify-content: flex-end;
     gap: 0.4rem;
+}
+
+@media (max-width: 900px) {
+    .etle--sourceDialogColumns {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 800px) {

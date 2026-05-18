@@ -3,6 +3,8 @@ import { setCollapsedGroups } from './SourceManager.js';
 import { DomRefs, Language, TextSource } from './types.js';
 
 export const isLorebookGroup = (group: string): boolean => group.startsWith('World/Lorebook: ');
+export const isCardGroup = (group: string): boolean => group.startsWith('Character Card: ');
+const getCardName = (group: string): string => group.replace(/^Character Card: /, '');
 
 const getLorebookName = (group: string): string => group.replace(/^World\/Lorebook: /, '');
 
@@ -23,7 +25,12 @@ interface SourcePanelHost {
 export function renderSourceTree(host: SourcePanelHost) {
     host.dom.tree.innerHTML = '';
     const groups = new Map<string, { label: string; branchName: string; sources: TextSource[] }>();
-    const trackedSources = host.getTrackedSources();
+    const query = String(host.dom.sourceSearch?.value ?? '').trim().toLowerCase();
+    const trackedSources = host.getTrackedSources().filter(source => {
+        if (!query) return true;
+        return [source.label, source.group, source.meta ?? '', source.id]
+            .some(value => String(value).toLowerCase().includes(query));
+    });
     for (const source of trackedSources) {
         const treeGroup = getTreeGroupForSource(source);
         if (!groups.has(treeGroup.key)) {
@@ -40,7 +47,9 @@ export function renderSourceTree(host: SourcePanelHost) {
         const empty = document.createElement('div');
         empty.classList.add('etle--empty');
         empty.textContent = host.sources.length
-            ? 'No source categories selected. Click Control to choose what appears here.'
+            ? query
+                ? 'No sources match the filter.'
+                : 'No source categories selected. Click Control to choose what appears here.'
             : 'No sources available';
         host.dom.tree.append(empty);
         return;
@@ -92,24 +101,42 @@ export function openSourceControlDialog(host: SourcePanelHost) {
     shell.method = 'dialog';
     shell.classList.add('etle--sourceDialogShell');
 
+    const header = document.createElement('div');
+    header.classList.add('etle--sourceDialogHeader');
     const title = document.createElement('h3');
     title.textContent = 'Source Categories';
-    shell.append(title);
+    const toggleSelected = document.createElement('button');
+    toggleSelected.type = 'button';
+    toggleSelected.classList.add('etle--sourceDialogToggle', 'fa-solid', 'fa-fw', 'fa-eye');
+    toggleSelected.title = 'Show only selected';
+    let showOnlySelected = false;
+    toggleSelected.addEventListener('click', (e) => {
+        e.preventDefault();
+        showOnlySelected = !showOnlySelected;
+        toggleSelected.classList.toggle('fa-eye');
+        toggleSelected.classList.toggle('fa-eye-slash');
+        toggleSelected.classList.toggle('etle--active');
+        filterAllRows(dialog, showOnlySelected);
+    });
+    header.append(title, toggleSelected);
+    shell.append(header);
 
-    const list = document.createElement('div');
-    list.classList.add('etle--sourceDialogList');
-    shell.append(list);
+    const columns = document.createElement('div');
+    columns.classList.add('etle--sourceDialogColumns');
+    shell.append(columns);
 
     if (!availableGroups.length) {
         const empty = document.createElement('div');
         empty.classList.add('etle--empty');
         empty.textContent = 'No sources available.';
-        list.append(empty);
+        columns.append(empty);
     } else {
-        const categories = availableGroups.filter(([group]) => !isLorebookGroup(group));
+        const categories = availableGroups.filter(([group]) => !isLorebookGroup(group) && !isCardGroup(group));
         const lorebooks = availableGroups.filter(([group]) => isLorebookGroup(group));
-        appendSourceControlRows(host, list, 'Categories', categories, (group, count) => `${group} (${count})`);
-        appendSourceControlRows(host, list, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`);
+        const cards = availableGroups.filter(([group]) => isCardGroup(group));
+        appendSourceControlColumn(host, columns, 'Categories', categories, (group, count) => `${group} (${count})`, false);
+        appendSourceControlColumn(host, columns, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`, true);
+        appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true);
     }
 
     const actions = document.createElement('div');
@@ -188,21 +215,40 @@ function renderSourceRow(host: SourcePanelHost, source: TextSource) {
     return item;
 }
 
-function appendSourceControlRows(
+function appendSourceControlColumn(
     host: SourcePanelHost,
-    list: HTMLElement,
+    columns: HTMLElement,
     title: string,
     groups: Array<[string, number]>,
     formatLabel: (group: string, count: number) => string,
+    searchable = false,
 ) {
-    if (!groups.length) return;
+    const column = document.createElement('section');
+    column.classList.add('etle--sourceDialogColumn');
     const groupTitle = document.createElement('div');
     groupTitle.classList.add('etle--sourceDialogGroup');
     groupTitle.textContent = title;
-    list.append(groupTitle);
+    column.append(groupTitle);
+    if (searchable) {
+        const search = document.createElement('input');
+        search.type = 'search';
+        search.placeholder = `Search ${title.toLowerCase()}`;
+        search.classList.add('etle--sourceDialogSearch');
+        search.addEventListener('input', () => filterSourceControlColumn(column, search.value));
+        column.append(search);
+    }
+    if (!groups.length) {
+        const empty = document.createElement('div');
+        empty.classList.add('etle--empty');
+        empty.textContent = 'None available.';
+        column.append(empty);
+        columns.append(column);
+        return;
+    }
     for (const [group, count] of groups) {
         const row = document.createElement('label');
         row.classList.add('etle--sourceDialogRow');
+        row.dataset.filterText = `${group} ${formatLabel(group, count)}`.toLowerCase();
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
         checkbox.value = group;
@@ -210,8 +256,42 @@ function appendSourceControlRows(
         const text = document.createElement('span');
         text.textContent = formatLabel(group, count);
         row.append(checkbox, text);
-        list.append(row);
+        column.append(row);
     }
+    columns.append(column);
+}
+
+function filterAllRows(dialog: HTMLDialogElement, showOnlySelected: boolean) {
+    dialog.querySelectorAll<HTMLElement>('.etle--sourceDialogRow').forEach(row => {
+        const checkbox = row.querySelector<HTMLInputElement>('input[type="checkbox"]');
+        if (showOnlySelected) {
+            row.hidden = !checkbox?.checked;
+        } else {
+            row.hidden = false;
+        }
+    });
+}
+
+function filterSourceControlColumn(column: HTMLElement, query: string) {
+    const value = query.trim().toLowerCase();
+    let visible = 0;
+
+    // Hide/show rows based on filter match
+    column.querySelectorAll<HTMLElement>('.etle--sourceDialogRow').forEach(row => {
+        const match = !value || String(row.dataset.filterText ?? '').includes(value);
+        row.hidden = !match;
+        if (match) visible++;
+    });
+
+    let empty = column.querySelector<HTMLElement>('.etle--sourceDialogEmptyFilter');
+    if (!empty) {
+        empty = document.createElement('div');
+        empty.classList.add('etle--empty', 'etle--sourceDialogEmptyFilter');
+        empty.textContent = 'No matches.';
+        column.append(empty);
+    }
+    empty.hidden = !!visible;
+    column.classList.toggle('etle--sourceDialogColumnEmpty', !visible);
 }
 
 function getTreeGroupForSource(source: TextSource) {

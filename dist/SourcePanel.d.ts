@@ -1,5 +1,6 @@
 import { DomRefs, Language, TextSource } from './types.js';
 export declare const isLorebookGroup: (group: string) => boolean;
+export declare const isCardGroup: (group: string) => boolean;
 interface SourcePanelHost {
     dom: DomRefs;
     sources: TextSource[];

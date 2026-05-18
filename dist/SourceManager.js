@@ -15,7 +15,7 @@ import { textgenerationwebui_preset_names, textgenerationwebui_settings } from '
 // @ts-ignore
 import { extension_settings } from '../../../../extensions.js';
 // @ts-ignore
-import { getRequestHeaders, saveSettingsDebounced } from '../../../../../script.js';
+import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCharactersDebounced, saveSettingsDebounced } from '../../../../../script.js';
 import { diffLines } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 const GROUP_ORDER = {
@@ -30,6 +30,7 @@ const GROUP_ORDER = {
     'Power User Customization': 90,
     'Connection Profiles': 100,
     'Personas': 110,
+    'Character Cards': 120,
 };
 export const getCollapsedGroups = () => {
     try {
@@ -395,6 +396,120 @@ const getSelectedConnectionProfile = () => {
     const selected = extension_settings?.connectionManager?.selectedProfile;
     return getConnectionManagerProfiles().find(profile => profile.id === selected) ?? null;
 };
+const getCharacterByAvatar = (avatar) => ((characters || []).find((character) => character?.avatar === avatar) ?? null);
+const getFreshCharacter = async (avatar) => {
+    await getOneCharacter?.(avatar);
+    const character = getCharacterByAvatar(avatar);
+    if (!character)
+        throw new Error(`Character "${avatar}" was not found.`);
+    return character;
+};
+const makeCharacterFormData = (character) => {
+    const data = character.data ?? {};
+    const extensions = data.extensions ?? {};
+    const formData = new FormData();
+    formData.set('avatar_url', String(character.avatar ?? ''));
+    formData.set('ch_name', String(character.name ?? data.name ?? ''));
+    formData.set('description', String(character.description ?? data.description ?? ''));
+    formData.set('personality', String(character.personality ?? data.personality ?? ''));
+    formData.set('scenario', String(character.scenario ?? data.scenario ?? ''));
+    formData.set('first_mes', String(character.first_mes ?? data.first_mes ?? ''));
+    formData.set('mes_example', String(character.mes_example ?? data.mes_example ?? ''));
+    formData.set('creator_notes', String(data.creator_notes ?? character.creatorcomment ?? ''));
+    formData.set('system_prompt', String(data.system_prompt ?? ''));
+    formData.set('post_history_instructions', String(data.post_history_instructions ?? ''));
+    formData.set('tags', Array.isArray(data.tags ?? character.tags) ? (data.tags ?? character.tags).join(', ') : String(data.tags ?? character.tags ?? ''));
+    formData.set('creator', String(data.creator ?? character.creator ?? ''));
+    formData.set('character_version', String(data.character_version ?? character.character_version ?? ''));
+    formData.set('talkativeness', String(extensions.talkativeness ?? character.talkativeness ?? 0.5));
+    formData.set('fav', String(extensions.fav ?? character.fav ?? false));
+    formData.set('world', String(extensions.world ?? ''));
+    formData.set('chat', String(character.chat ?? `${character.name ?? data.name ?? 'Character'} - Chat`));
+    formData.set('create_date', String(character.create_date ?? ''));
+    formData.set('json_data', JSON.stringify(character));
+    const depthPrompt = extensions.depth_prompt ?? {};
+    formData.set('depth_prompt_prompt', String(depthPrompt.prompt ?? character.depth_prompt_prompt ?? ''));
+    formData.set('depth_prompt_depth', String(depthPrompt.depth ?? character.depth_prompt_depth ?? 4));
+    formData.set('depth_prompt_role', String(depthPrompt.role ?? character.depth_prompt_role ?? 0));
+    const alternateGreetings = Array.isArray(data.alternate_greetings) ? data.alternate_greetings : [];
+    for (const greeting of alternateGreetings)
+        formData.append('alternate_greetings', String(greeting));
+    return formData;
+};
+const saveCharacterCard = async (character) => {
+    const response = await fetch('/api/characters/edit', {
+        method: 'POST',
+        headers: getRequestHeaders({ omitContentType: true }),
+        body: makeCharacterFormData(character),
+        cache: 'no-cache',
+    });
+    if (!response.ok)
+        throw new Error(`Character could not be saved (${response.status}).`);
+    await getOneCharacter?.(character.avatar);
+    printCharactersDebounced?.();
+};
+const CHARACTER_CARD_FIELDS = [
+    { key: 'description', label: 'Description', get: (card) => card.description ?? card.data?.description, set: (card, value) => { card.description = value; (card.data ??= {}).description = value; } },
+    { key: 'personality', label: 'Personality', get: (card) => card.personality ?? card.data?.personality, set: (card, value) => { card.personality = value; (card.data ??= {}).personality = value; } },
+    { key: 'scenario', label: 'Scenario', get: (card) => card.scenario ?? card.data?.scenario, set: (card, value) => { card.scenario = value; (card.data ??= {}).scenario = value; } },
+    { key: 'first_mes', label: 'First Message', get: (card) => card.first_mes ?? card.data?.first_mes, set: (card, value) => { card.first_mes = value; (card.data ??= {}).first_mes = value; } },
+    { key: 'mes_example', label: 'Example Dialogue', get: (card) => card.mes_example ?? card.data?.mes_example, set: (card, value) => { card.mes_example = value; (card.data ??= {}).mes_example = value; } },
+    { key: 'creator_notes', label: 'Creator Notes', get: (card) => card.data?.creator_notes ?? card.creatorcomment, set: (card, value) => { (card.data ??= {}).creator_notes = value; card.creatorcomment = value; } },
+    { key: 'system_prompt', label: 'System Prompt', get: (card) => card.data?.system_prompt, set: (card, value) => { (card.data ??= {}).system_prompt = value; } },
+    { key: 'post_history_instructions', label: 'Post-History Instructions', get: (card) => card.data?.post_history_instructions, set: (card, value) => { (card.data ??= {}).post_history_instructions = value; } },
+    { key: 'depth_prompt_prompt', label: "Character's Note", get: (card) => card.data?.extensions?.depth_prompt?.prompt ?? card.depth_prompt_prompt, set: (card, value) => { ((card.data ??= {}).extensions ??= {}).depth_prompt ??= {}; card.data.extensions.depth_prompt.prompt = value; card.depth_prompt_prompt = value; } },
+    { key: 'tags', label: 'Tags to Embed', get: (card) => Array.isArray(card.data?.tags ?? card.tags) ? (card.data?.tags ?? card.tags).join(', ') : card.data?.tags ?? card.tags, set: (card, value) => { const tags = value.split(',').map(tag => tag.trim()).filter(Boolean); card.tags = tags; (card.data ??= {}).tags = tags; } },
+];
+const makeCharacterCardSources = (character) => {
+    const avatar = String(character.avatar ?? character.name ?? '');
+    let activeCharacter = character;
+    const cardName = String(character.name ?? character.data?.name ?? avatar);
+    const group = `Character Card: ${cardName}`;
+    const refresh = async () => {
+        activeCharacter = await getFreshCharacter(avatar);
+        return activeCharacter;
+    };
+    const save = async () => {
+        await saveCharacterCard(activeCharacter);
+        activeCharacter = await getFreshCharacter(String(activeCharacter.avatar ?? avatar));
+    };
+    const sources = CHARACTER_CARD_FIELDS.map((field, index) => ({
+        id: `character-card:${avatar}:${field.key}`,
+        label: field.label,
+        group,
+        groupOrder: GROUP_ORDER['Character Cards'],
+        order: index,
+        readonly: false,
+        read: () => String(field.get(activeCharacter) ?? ''),
+        readFresh: async () => String(field.get(await refresh()) ?? ''),
+        write: (value) => {
+            field.set(activeCharacter, value);
+        },
+        save,
+        meta: `Character card: ${avatar}`,
+    }));
+    sources.push({
+        id: `character-card:${avatar}:json`,
+        label: 'Full JSON',
+        group,
+        groupOrder: GROUP_ORDER['Character Cards'],
+        order: 999,
+        readonly: false,
+        read: () => JSON.stringify(activeCharacter, null, 2),
+        readFresh: async () => JSON.stringify(await refresh(), null, 2),
+        write: (value) => {
+            const parsed = JSON.parse(value);
+            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+                throw new Error('Character card must be a JSON object.');
+            if (!parsed.avatar)
+                parsed.avatar = avatar;
+            activeCharacter = parsed;
+        },
+        save,
+        meta: `Character card JSON: ${avatar}`,
+    });
+    return sources;
+};
 const makeConnectionProfileSource = (profile) => {
     const branchManager = getBranchManager('Connection Profiles');
     const profileId = String(profile.id ?? profile.name ?? 'unknown');
@@ -527,6 +642,14 @@ const getBranchManager = (group) => {
 };
 export const getSources = async () => {
     const sources = [];
+    if ((!Array.isArray(characters) || !characters.length) && typeof getCharacters === 'function') {
+        try {
+            await getCharacters();
+        }
+        catch (error) {
+            console.warn(`[${NAME}] Could not load character cards`, error);
+        }
+    }
     if (promptManager?.serviceSettings?.prompts) {
         const branchManager = getBranchManager('Chat Completion Prompts');
         const branchSuffix = branchManager ? `@${branchManager.getCurrentBranch()}` : '';
@@ -772,6 +895,13 @@ export const getSources = async () => {
     }
     for (const profile of getConnectionManagerProfiles()) {
         sources.push(makeConnectionProfileSource(profile));
+    }
+    if (Array.isArray(characters) && characters.length) {
+        for (const character of characters) {
+            if (!character?.avatar)
+                continue;
+            sources.push(...makeCharacterCardSources(character));
+        }
     }
     if (Array.isArray(world_names) && world_names.length) {
         for (const worldName of world_names) {
