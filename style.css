@@ -1246,6 +1246,10 @@
     text-shadow: none !important;
 }
 
+#etle--panel .prism-code-editor {
+    --editor__caret: #aeafad;
+}
+
 #etle--panel .prism-code-editor textarea {
     background: transparent !important;
     border: 0 !important;
