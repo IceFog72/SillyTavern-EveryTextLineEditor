@@ -57,6 +57,9 @@ export declare class EveryTextLineEditor {
     sourceWatchInFlight: boolean;
     runtimeSourceRefreshTimer: number | null;
     sourceEventHandlers: Array<[string, (...args: any[]) => void]>;
+    _popupPreviousParent: Element | null;
+    _popupEscHandler: ((e: KeyboardEvent) => void) | null;
+    syncWandToggleButton?: () => void;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -71,7 +74,10 @@ export declare class EveryTextLineEditor {
     setSidebarTab(tab: SidebarTab): void;
     setSidebarCollapsed(collapsed: boolean): void;
     toggleDrawerClasses(): void;
+    toggleFullscreen(): void;
     setUnsavedLock(isLocked: any): void;
+    togglePromptInspector(): void;
+    addWandToggleButton(): void;
     makeIconButton(icon: any, title: any, onClick: any): HTMLButtonElement;
     makeTextButton(text: any, icon: any, onClick: any): HTMLButtonElement;
     renderStatusBar(): HTMLElement;
@@ -85,11 +91,13 @@ export declare class EveryTextLineEditor {
     isCaretNavigationKey(event: KeyboardEvent): boolean;
     createReadonlyEditor(host: any): void;
     bindDiffScrollSync(): void;
+    scrollDiffPanesBy(deltaY: number): void;
     applyScrollSync(from: any, to: any): void;
     syncDiffScroll(): void;
     scheduleDiffScrollSync(): void;
     refreshSources(keepSelection?: boolean): Promise<void>;
     startSourceEventListeners(): void;
+    inspectGeneratedPrompt(data: Record<string, any> | undefined, key: 'chat' | 'prompt'): Promise<void>;
     stopSourceEventListeners(): void;
     scheduleRuntimeSourceRefresh(): void;
     refreshSourcesFromRuntime(): Promise<void>;
@@ -108,7 +116,8 @@ export declare class EveryTextLineEditor {
     selectSource(id: any, { force }?: {
         force?: boolean;
     }): Promise<void>;
-    confirmUnsavedSourceChange(action?: string): Promise<"cancel" | "save" | "discard">;
+    confirmPromptSend(isChatCompletion?: boolean): Promise<"save" | "cancel" | "discard">;
+    confirmUnsavedSourceChange(action?: string): Promise<"cancel" | "discard" | "save">;
     setEditorValue(value: any): void;
     withSuppressedEditorChange(callback: () => void): void;
     isValueDirty(value: any): boolean;

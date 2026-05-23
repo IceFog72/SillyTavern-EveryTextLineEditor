@@ -13,6 +13,10 @@ export declare const STORAGE: {
     sourceLanguages: string;
     trackedSources: string;
     ignoreFullJsonHistory: string;
+    promptInspectorEnabled: string;
+    promptInspectorCurrent: string;
+    promptInspectorPrevious: string;
+    promptInspectorUpdatedAt: string;
 };
 export declare const DB: {
     readonly NAME: `${string}:history`;

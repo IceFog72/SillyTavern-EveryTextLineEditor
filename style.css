@@ -17,6 +17,47 @@
     overflow: hidden;
 }
 
+/* Popup overlay mode — panel physically moved to document.body */
+.etle--backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    animation: etle--backdropIn 200ms ease;
+}
+
+@keyframes etle--backdropIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+#etle--panel.etle--popup {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+    min-width: 100vw !important;
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden;
+    animation: etle--popupIn 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes etle--popupIn {
+    from { opacity: 0.65; transform: scale(0.987); }
+    to   { opacity: 1;    transform: scale(1); }
+}
+
+#etle--fullscreenBtn {
+    flex: 0 0 auto;
+    order: -1;
+}
+
 #etle--panel select,
 #etle--panel input {
     font: inherit;
@@ -192,14 +233,20 @@
 .etle--sourcesToolbar {
     flex-shrink: 0;
     display: flex;
-    justify-content: stretch;
+    gap: 0.35rem;
     padding: 0.35rem 0.45rem;
     border-top: 1px solid color-mix(in srgb, var(--SmartThemeBorderColor) 75%, transparent);
 }
 
 .etle--sourcesToolbar .menu_button {
-    width: 100%;
+    flex: 1 1 0;
+    min-width: 0;
     justify-content: center;
+}
+
+.etle--inspectActive {
+    outline: 1px solid #f0a848 !important;
+    color: #f0a848 !important;
 }
 
 .etle--settingsPanel {

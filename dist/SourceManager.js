@@ -1028,7 +1028,7 @@ export const getSources = async () => {
         groupOrder: GROUP_ORDER['Prompt Inspector'],
         readonly: false,
         enabled: isPromptInspectorEnabled(),
-        toggleable: true,
+        toggleable: false,
         excludeFromHistory: true,
         read: getPromptInspectorCurrent,
         write: (value) => {

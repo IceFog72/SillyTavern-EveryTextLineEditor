@@ -104,7 +104,14 @@ SillyTavern-EveryTextLineEditor/
 
 ## Support Development
 
-[Patreon](https://www.patreon.com/cw/IceFog72)
+- **Patreon**: No more Patreon because they scam.
+
+---
+
+## Credits
+
+* **[SillyTavern Prompt Inspector](https://github.com/SillyTavern/Extension-PromptInspector)**: Inspiration and core design patterns for prompt inspection features, including dynamic JSON/YAML formatting toggles, prompt interception workflows, and wand menu integration.
+* **[SillyTavern Quick Replies Drawer](https://github.com/LenAnderson/SillyTavern-QuickRepliesDrawer)**: Baseline exemplar and inspiration.
 
 ---
 

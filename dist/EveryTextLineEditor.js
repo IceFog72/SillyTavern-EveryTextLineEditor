@@ -56,6 +56,36 @@ const getTrackedSourceGroups = () => {
         return [];
     }
 };
+const supportsYaml = () => {
+    // @ts-ignore
+    return typeof SillyTavern === 'object' && typeof SillyTavern.libs === 'object' && 'yaml' in SillyTavern.libs;
+};
+const jsonToYaml = (json) => {
+    if (!supportsYaml())
+        return json;
+    try {
+        const obj = JSON.parse(json);
+        // @ts-ignore
+        return SillyTavern.libs.yaml.stringify(obj, { lineWidth: 0 });
+    }
+    catch (e) {
+        console.error('Failed to convert JSON to YAML', e);
+        return json;
+    }
+};
+const yamlToJson = (yaml) => {
+    if (!supportsYaml())
+        return yaml;
+    try {
+        // @ts-ignore
+        const obj = SillyTavern.libs.yaml.parse(yaml);
+        return JSON.stringify(obj, null, 4);
+    }
+    catch (e) {
+        console.error('Failed to convert YAML to JSON', e);
+        return yaml;
+    }
+};
 let monacoLoadPromise = null;
 let typoLoadPromise = null;
 let englishDictionaryPromise = null;
@@ -172,6 +202,9 @@ export class EveryTextLineEditor {
     sourceWatchInFlight;
     runtimeSourceRefreshTimer;
     sourceEventHandlers;
+    _popupPreviousParent;
+    _popupEscHandler;
+    syncWandToggleButton;
     constructor() {
         this.sources = [];
         this.selectedSource = null;
@@ -208,11 +241,14 @@ export class EveryTextLineEditor {
         this.sourceWatchInFlight = false;
         this.runtimeSourceRefreshTimer = null;
         this.sourceEventHandlers = [];
+        this._popupPreviousParent = null;
+        this._popupEscHandler = null;
         const storedSync = localStorage.getItem(STORAGE.scrollSync);
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
     async inject() {
         this.renderDrawer();
+        this.addWandToggleButton();
         await this.editorReady;
         await this.refreshSources();
         this.startSourceEventListeners();
@@ -230,6 +266,7 @@ export class EveryTextLineEditor {
         this.editor?.dispose?.();
         this.oldEditor?.dispose?.();
         this.dom.drawer?.remove();
+        this.dom.wandButton?.remove();
         this.sources = [];
         this.selectedSource = null;
         this.selectedSourceBaseline = '';
@@ -317,6 +354,10 @@ export class EveryTextLineEditor {
         const sidebarHead = document.createElement('div');
         sidebarHead.classList.add('etle--sidebarHead');
         sidebar.append(sidebarHead);
+        const fullscreenBtn = this.makeIconButton('fa-expand', 'Expand to fullscreen', () => this.toggleFullscreen());
+        fullscreenBtn.id = 'etle--fullscreenBtn';
+        this.dom.fullscreenBtn = fullscreenBtn;
+        sidebarHead.append(fullscreenBtn);
         const sidebarTitle = document.createElement('h3');
         sidebarTitle.textContent = 'Every Text Line Editor';
         sidebarHead.append(sidebarTitle);
@@ -358,6 +399,12 @@ export class EveryTextLineEditor {
         sourcesToolbar.classList.add('etle--sourcesToolbar');
         const addSource = this.makeTextButton('Control', 'fa-filter', () => this.openSourceControlDialog());
         this.dom.addSource = addSource;
+        const inspectEnabled = localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+        const inspectBtn = this.makeTextButton(inspectEnabled ? 'Stop Inspecting' : 'Inspect Prompts', inspectEnabled ? 'fa-bug-slash' : 'fa-bug', () => this.togglePromptInspector());
+        inspectBtn.id = 'etle--inspectPromptsBtn';
+        inspectBtn.title = 'Toggle prompt inspection';
+        inspectBtn.classList.toggle('etle--inspectActive', inspectEnabled);
+        this.dom.inspectPromptsBtn = inspectBtn;
         const sourceSearch = document.createElement('input');
         this.dom.sourceSearch = sourceSearch;
         sourceSearch.classList.add('etle--sourceSearch');
@@ -370,6 +417,7 @@ export class EveryTextLineEditor {
         sourcesPanel.append(sourceSearch);
         sourcesPanel.append(tree);
         sourcesToolbar.append(addSource);
+        sourcesToolbar.append(inspectBtn);
         sourcesPanel.append(sourcesToolbar);
         const historyPanel = document.createElement('section');
         this.dom.historyPanel = historyPanel;
@@ -630,9 +678,145 @@ export class EveryTextLineEditor {
         this.dom.root.classList.toggle('openDrawer');
         this.dom.root.classList.toggle('closedDrawer');
     }
+    toggleFullscreen() {
+        const root = this.dom.root;
+        if (!root)
+            return;
+        const isPopup = root.classList.contains('etle--popup');
+        if (!isPopup) {
+            // --- Enter popup mode ---
+            // Remember where the panel lives so we can put it back
+            this._popupPreviousParent = root.parentElement;
+            // Dark backdrop behind the popup
+            const backdrop = document.createElement('div');
+            backdrop.id = 'etle--backdrop';
+            backdrop.classList.add('etle--backdrop');
+            document.body.append(backdrop);
+            this.dom.backdrop = backdrop;
+            // Move the panel itself onto body as a floating popup
+            root.classList.add('etle--popup');
+            document.body.append(root);
+            // Allow Escape to exit popup mode
+            this._popupEscHandler = (e) => {
+                if (e.key === 'Escape')
+                    this.toggleFullscreen();
+            };
+            document.addEventListener('keydown', this._popupEscHandler);
+        }
+        else {
+            // --- Exit popup mode ---
+            root.classList.remove('etle--popup');
+            // Return panel to its original parent (inside the drawer)
+            if (this._popupPreviousParent) {
+                this._popupPreviousParent.append(root);
+                this._popupPreviousParent = null;
+            }
+            // Remove backdrop
+            this.dom.backdrop?.remove();
+            delete this.dom.backdrop;
+            // Remove Escape handler
+            if (this._popupEscHandler) {
+                document.removeEventListener('keydown', this._popupEscHandler);
+                this._popupEscHandler = null;
+            }
+        }
+        // Sync button icon
+        const nowPopup = root.classList.contains('etle--popup');
+        if (this.dom.fullscreenBtn) {
+            this.dom.fullscreenBtn.classList.toggle('fa-expand', !nowPopup);
+            this.dom.fullscreenBtn.classList.toggle('fa-compress', nowPopup);
+            this.dom.fullscreenBtn.title = nowPopup ? 'Exit fullscreen' : 'Expand to fullscreen';
+        }
+        requestAnimationFrame(() => {
+            this.editor?.update?.();
+            this.oldEditor?.update?.();
+            this.monacoEditor?.layout?.();
+            this.monacoDiffEditor?.layout?.();
+            this.updateMasterScrollbarHeight?.();
+        });
+    }
     setUnsavedLock(isLocked) {
         this.dom.root?.classList.toggle('pinnedOpen', !!isLocked);
         this.dom.icon?.classList.toggle('drawerPinnedOpen', !!isLocked);
+    }
+    togglePromptInspector() {
+        const enabled = localStorage.getItem(STORAGE.promptInspectorEnabled) !== 'true';
+        localStorage.setItem(STORAGE.promptInspectorEnabled, String(enabled));
+        const btn = this.dom.inspectPromptsBtn;
+        if (btn) {
+            const icon = btn.querySelector('span.fa-solid');
+            const label = btn.querySelectorAll('span')[1];
+            if (icon) {
+                icon.classList.toggle('fa-bug', !enabled);
+                icon.classList.toggle('fa-bug-slash', enabled);
+            }
+            if (label)
+                label.textContent = enabled ? 'Stop Inspecting' : 'Inspect Prompts';
+            btn.classList.toggle('etle--inspectActive', enabled);
+        }
+        globalThis.toastr?.info?.(`Prompt inspection is now ${enabled ? 'enabled' : 'disabled'}`);
+        this.syncWandToggleButton?.();
+        this.renderTree();
+    }
+    addWandToggleButton() {
+        this.dom.wandButton?.remove();
+        const getEnabledState = () => localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+        const enabledText = 'Stop Inspecting';
+        const disabledText = 'Inspect Prompts';
+        const enabledIcon = 'fa-solid fa-bug-slash';
+        const disabledIcon = 'fa-solid fa-bug';
+        const getIcon = () => getEnabledState() ? enabledIcon : disabledIcon;
+        const getText = () => getEnabledState() ? enabledText : disabledText;
+        const launchButton = document.createElement('div');
+        this.dom.wandButton = launchButton;
+        launchButton.id = 'inspectNextPromptButton';
+        launchButton.classList.add('list-group-item', 'flex-container', 'flexGap5', 'interactable');
+        launchButton.tabIndex = 0;
+        launchButton.title = 'Toggle prompt inspection';
+        const icon = document.createElement('i');
+        icon.className = getIcon();
+        launchButton.appendChild(icon);
+        const textSpan = document.createElement('span');
+        textSpan.textContent = getText();
+        launchButton.appendChild(textSpan);
+        const container = document.getElementById('prompt_inspector_wand_container') ?? document.getElementById('extensionsMenu');
+        if (!container) {
+            console.warn(`[${NAME}] Could not find prompt_inspector_wand_container or extensionsMenu`);
+            return;
+        }
+        container.classList.add('interactable');
+        container.tabIndex = 0;
+        container.appendChild(launchButton);
+        const updateToolbarButton = () => {
+            const isEnabled = getEnabledState();
+            const btn = this.dom.inspectPromptsBtn;
+            if (btn) {
+                const bugIcon = btn.querySelector('span.fa-solid');
+                const text = btn.querySelectorAll('span')[1];
+                if (bugIcon) {
+                    bugIcon.className = `fa-solid fa-fw ${isEnabled ? 'fa-bug-slash' : 'fa-bug'}`;
+                }
+                if (text)
+                    text.textContent = isEnabled ? 'Stop Inspecting' : 'Inspect Prompts';
+                btn.classList.toggle('etle--inspectActive', isEnabled);
+            }
+        };
+        const toggle = () => {
+            const newState = !getEnabledState();
+            localStorage.setItem(STORAGE.promptInspectorEnabled, String(newState));
+            globalThis.toastr?.info?.(`Prompt inspection is now ${newState ? 'enabled' : 'disabled'}`);
+            icon.className = getIcon();
+            textSpan.textContent = getText();
+            updateToolbarButton();
+            this.renderTree();
+        };
+        launchButton.addEventListener('click', toggle);
+        this.syncWandToggleButton = () => {
+            if (launchButton && icon && textSpan) {
+                icon.className = getIcon();
+                textSpan.textContent = getText();
+            }
+        };
     }
     makeIconButton(icon, title, onClick) {
         const button = document.createElement('button');
@@ -1159,14 +1343,33 @@ export class EveryTextLineEditor {
         if (!data || data.dryRun || localStorage.getItem(STORAGE.promptInspectorEnabled) !== 'true')
             return;
         const prompt = data[key];
-        const value = typeof prompt === 'string' ? prompt : JSON.stringify(prompt ?? '', null, 4);
+        if (!prompt)
+            return;
+        if (typeof prompt === 'string' && !prompt.trim())
+            return;
+        if (Array.isArray(prompt) && prompt.length === 0)
+            return;
+        const inspectFormat = (key === 'chat' && supportsYaml())
+            ? (localStorage.getItem('promptInspectorFormat') || 'yaml')
+            : 'json';
+        const initialJsonValue = typeof prompt === 'string' ? prompt : JSON.stringify(prompt ?? '', null, 4);
+        const value = inspectFormat === 'yaml' ? jsonToYaml(initialJsonValue) : initialJsonValue;
         setPromptInspectorSnapshot(value);
         await this.open();
         const sourceId = getPromptInspectorSourceId();
         await this.selectSource(sourceId, { force: true });
         if (this.selectedSource?.id !== sourceId)
             return;
-        const previousValue = getPromptInspectorPreviousValue();
+        let previousValue = getPromptInspectorPreviousValue();
+        if (previousValue && key === 'chat') {
+            const looksLikeJson = previousValue.trim().startsWith('[') || previousValue.trim().startsWith('{');
+            if (inspectFormat === 'yaml' && looksLikeJson) {
+                previousValue = jsonToYaml(previousValue);
+            }
+            else if (inspectFormat === 'json' && !looksLikeJson) {
+                previousValue = yamlToJson(previousValue);
+            }
+        }
         this.selectedSourceBaseline = value;
         this.historyCommit = previousValue ? {
             id: 'prompt-inspector-previous',
@@ -1187,7 +1390,20 @@ export class EveryTextLineEditor {
             this.toggleDiff();
         else
             this.renderDiff();
-        const choice = await this.confirmPromptSend();
+        // Enter popup mode so the full editor is visible for reviewing the prompt
+        const wasAlreadyPopup = this.dom.root?.classList.contains('etle--popup') ?? false;
+        if (!wasAlreadyPopup)
+            this.toggleFullscreen();
+        let choice;
+        try {
+            choice = await this.confirmPromptSend(key === 'chat');
+        }
+        finally {
+            // Exit popup mode if we entered it, regardless of the choice made
+            if (!wasAlreadyPopup && this.dom.root?.classList.contains('etle--popup')) {
+                this.toggleFullscreen();
+            }
+        }
         if (choice === 'cancel') {
             await stopGeneration?.();
             return;
@@ -1202,8 +1418,10 @@ export class EveryTextLineEditor {
             this.updateDirty(false);
             return;
         }
+        const currentFormat = localStorage.getItem('promptInspectorFormat') || 'yaml';
+        const finalJsonOutput = (key === 'chat' && currentFormat === 'yaml') ? yamlToJson(output) : output;
         try {
-            const chat = JSON.parse(output);
+            const chat = JSON.parse(finalJsonOutput);
             if (Array.isArray(chat) && Array.isArray(data.chat)) {
                 data.chat.splice(0, data.chat.length, ...chat);
                 setPromptInspectorSnapshot(output);
@@ -1215,8 +1433,8 @@ export class EveryTextLineEditor {
             }
         }
         catch (error) {
-            console.error(`[${NAME}] Invalid prompt inspector JSON`, error);
-            globalThis.toastr?.error?.('Invalid prompt JSON. Generation cancelled.');
+            console.error(`[${NAME}] Invalid prompt inspector JSON/YAML`, error);
+            globalThis.toastr?.error?.('Invalid prompt JSON/YAML. Generation cancelled.');
             await stopGeneration?.();
         }
     }
@@ -1330,12 +1548,15 @@ export class EveryTextLineEditor {
         const cssLanguage = LANGUAGES.find(lang => lang.id === 'css') ?? LANGUAGES[0];
         const markdownLanguage = LANGUAGES.find(lang => lang.id === 'markdown') ?? LANGUAGES[0];
         const textLanguage = LANGUAGES.find(lang => lang.id === 'text') ?? LANGUAGES[0];
+        const yamlLanguage = LANGUAGES.find(lang => lang.id === 'yaml') ?? LANGUAGES[0];
         const id = source.id.toLowerCase();
         const label = source.label.toLowerCase();
         if (id.includes('custom_css') || label.includes('css'))
             return cssLanguage;
-        if (source.group.includes('Prompt Inspector'))
-            return textLanguage;
+        if (source.group.includes('Prompt Inspector')) {
+            const format = localStorage.getItem('promptInspectorFormat') || 'yaml';
+            return format === 'yaml' ? yamlLanguage : jsonLanguage;
+        }
         if (source.group.includes('Connection Profiles'))
             return jsonLanguage;
         if (source.group.includes('Character Card') && label.includes('json'))
@@ -1410,7 +1631,7 @@ export class EveryTextLineEditor {
         if (this.selectedSidebarTab === 'history')
             this.refreshHistory();
     }
-    async confirmPromptSend() {
+    async confirmPromptSend(isChatCompletion = false) {
         if (!this.dom.actionsLeft)
             return 'discard';
         this.dom.actionsLeft.innerHTML = '';
@@ -1421,7 +1642,79 @@ export class EveryTextLineEditor {
         const discard = this.makeTextButton('Discard changes', 'fa-undo', () => { });
         const cancel = this.makeTextButton('Cancel generation', 'fa-ban', () => { });
         cancel.classList.add('redWarningBG');
-        this.dom.actionsLeft.append(notice, save, discard, cancel);
+        let formatSelect;
+        if (isChatCompletion && supportsYaml()) {
+            formatSelect = document.createElement('select');
+            formatSelect.classList.add('text_pole', 'etle--statusSelect');
+            formatSelect.style.marginLeft = '10px';
+            formatSelect.style.padding = '2px 5px';
+            formatSelect.style.height = 'auto';
+            formatSelect.style.width = 'auto';
+            const optJson = document.createElement('option');
+            optJson.value = 'json';
+            optJson.textContent = 'JSON';
+            const optYaml = document.createElement('option');
+            optYaml.value = 'yaml';
+            optYaml.textContent = 'YAML';
+            formatSelect.append(optJson, optYaml);
+            const currentFormat = localStorage.getItem('promptInspectorFormat') || 'yaml';
+            formatSelect.value = currentFormat;
+            formatSelect.addEventListener('change', () => {
+                const newFormat = formatSelect.value;
+                const oldFormat = localStorage.getItem('promptInspectorFormat') || 'yaml';
+                if (newFormat === oldFormat)
+                    return;
+                localStorage.setItem('promptInspectorFormat', newFormat);
+                // Get the current value from the editor
+                const currentValue = this.getCurrentEditorValue();
+                let newValue = currentValue;
+                if (newFormat === 'yaml') {
+                    newValue = jsonToYaml(currentValue);
+                }
+                else {
+                    newValue = yamlToJson(currentValue);
+                }
+                // Switch language in the editor
+                const langId = newFormat === 'yaml' ? 'yaml' : 'json';
+                const lang = LANGUAGES.find(l => l.id === langId);
+                if (lang) {
+                    this.currentLanguage = lang;
+                    this.editor?.setOptions({ language: lang.id });
+                    this.oldEditor?.setOptions({ language: lang.id });
+                    this.setMonacoDiffLanguage();
+                }
+                // Update baseline value in the new format so diffing is compared correctly
+                if (this.selectedSourceBaseline) {
+                    if (newFormat === 'yaml') {
+                        this.selectedSourceBaseline = jsonToYaml(this.selectedSourceBaseline);
+                    }
+                    else {
+                        this.selectedSourceBaseline = yamlToJson(this.selectedSourceBaseline);
+                    }
+                }
+                // Update the baseline of historyCommit if any
+                if (this.historyCommit?.content) {
+                    if (newFormat === 'yaml') {
+                        this.historyCommit.content = jsonToYaml(this.historyCommit.content);
+                    }
+                    else {
+                        this.historyCommit.content = yamlToJson(this.historyCommit.content);
+                    }
+                }
+                // Update editor value
+                this.setEditorValue(newValue);
+                this.updateDirty(this.isCurrentEditorDirty());
+                this.renderDiff();
+                this.updateStatusBar();
+                this.renderTree();
+            });
+        }
+        if (formatSelect) {
+            this.dom.actionsLeft.append(notice, save, discard, cancel, formatSelect);
+        }
+        else {
+            this.dom.actionsLeft.append(notice, save, discard, cancel);
+        }
         this.editor?.focus?.();
         return new Promise((resolve) => {
             const complete = (choice) => {
@@ -2272,6 +2565,7 @@ export class EveryTextLineEditor {
             wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
         });
         this.applyMonacoMinimapOption();
+        this.applyMonacoDiffWordWrapOption();
         this.monacoDiffEditor.setModel({
             original: this.monacoDiffOriginalModel,
             modified: this.monacoDiffModifiedModel,
