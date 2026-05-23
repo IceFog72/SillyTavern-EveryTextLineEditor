@@ -1,0 +1,24 @@
+# Cursor Agent Rules
+
+## Step 1 — Always read first
+- Read `CONTEXT.md` before any task. It defines all domain terms.
+- Check `.skills/handoffs/` for recent handoff docs. Read the latest if present.
+- Check `.skills/README.md` to see all available skills.
+
+## Step 2 — CodeGraph
+Check if `.codegraph/` exists. If yes, use `codegraph_search`, `codegraph_callers`, `codegraph_impact` for navigation. For deep exploration, spawn a subagent with `codegraph_explore`. Never call `codegraph_explore` or `codegraph_context` in the main agent session.
+
+## Step 3 — Plan before code
+For any non-trivial task, invoke `grill-me` to align on requirements, then `to-prd` to capture a structured Product Requirements Document (PRD), and then `writing-plans` to produce a concrete task list. No code until the plan is approved.
+
+## Step 4 — Skills
+- `/grill-me` → `.skills/grill-me/SKILL.md`
+- `/to-prd` → `.skills/to-prd/SKILL.md`
+- `/writing-plans` → `.skills/writing-plans/SKILL.md`
+- `/handoff` → `.skills/handoff/SKILL.md`
+- `/tdd` → `.skills/tdd/SKILL.md`
+- `/diagnose` → `.skills/diagnose/SKILL.md`
+- `/zoom-out` → `.skills/zoom-out/SKILL.md`
+
+## Always active
+Git guardrails from `.skills/git-guardrails/SKILL.md` apply to every action.

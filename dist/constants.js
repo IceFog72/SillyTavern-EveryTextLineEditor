@@ -15,6 +15,10 @@ export const STORAGE = {
     sourceLanguages: `${NAME}:sourceLanguages`,
     trackedSources: `${NAME}:trackedSources`,
     ignoreFullJsonHistory: `${NAME}:ignoreFullJsonHistory`,
+    promptInspectorEnabled: `${NAME}:promptInspectorEnabled`,
+    promptInspectorCurrent: `${NAME}:promptInspectorCurrent`,
+    promptInspectorPrevious: `${NAME}:promptInspectorPrevious`,
+    promptInspectorUpdatedAt: `${NAME}:promptInspectorUpdatedAt`,
 };
 export const DB = {
     NAME: `${NAME}:history`,

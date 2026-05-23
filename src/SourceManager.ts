@@ -32,6 +32,7 @@ const GROUP_ORDER: Record<string, number> = {
     'Power User Customization': 90,
     'Connection Profiles': 100,
     'Personas': 110,
+    'Prompt Inspector': 115,
     'Character Cards': 120,
 };
 
@@ -87,6 +88,21 @@ const replaceObjectContents = (target: Record<string, any>, source: Record<strin
 };
 
 const normalizePromptContent = (value: unknown): string => String(value ?? '').trim().replace(/\r\n/g, '\n');
+
+const getPromptInspectorCurrent = () => localStorage.getItem(STORAGE.promptInspectorCurrent) ?? '';
+const getPromptInspectorPrevious = () => localStorage.getItem(STORAGE.promptInspectorPrevious) ?? '';
+const isPromptInspectorEnabled = () => localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+
+export const setPromptInspectorSnapshot = (value: string) => {
+    const current = getPromptInspectorCurrent();
+    if (current && current !== value) localStorage.setItem(STORAGE.promptInspectorPrevious, current);
+    localStorage.setItem(STORAGE.promptInspectorCurrent, value);
+    localStorage.setItem(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
+};
+
+export const getPromptInspectorSourceId = () => 'prompt-inspector:last-result';
+
+export const getPromptInspectorPreviousValue = () => getPromptInspectorPrevious();
 
 export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
     const oldLines = splitLines(oldText);
@@ -1124,6 +1140,28 @@ export const getSources = async (): Promise<TextSource[]> => {
         sources.push(makeThemeJsonSource());
         sources.push(makeCustomCssSource());
     }
+
+    sources.push({
+        id: getPromptInspectorSourceId(),
+        label: isPromptInspectorEnabled() ? 'Last inspected prompt enabled' : 'Last inspected prompt disabled',
+        group: 'Prompt Inspector',
+        groupOrder: GROUP_ORDER['Prompt Inspector'],
+        readonly: false,
+        enabled: isPromptInspectorEnabled(),
+        toggleable: true,
+        excludeFromHistory: true,
+        read: getPromptInspectorCurrent,
+        write: (value) => {
+            setPromptInspectorSnapshot(value);
+        },
+        save: () => {},
+        toggle: () => {
+            localStorage.setItem(STORAGE.promptInspectorEnabled, String(!isPromptInspectorEnabled()));
+        },
+        meta: localStorage.getItem(STORAGE.promptInspectorUpdatedAt)
+            ? `Last inspected prompt: ${new Date(Number(localStorage.getItem(STORAGE.promptInspectorUpdatedAt))).toLocaleString()}`
+            : 'Captures next generation prompt when enabled.',
+    });
 
     if (typeof power_user?.persona_description === 'string') {
         sources.push(makeObjectFieldSource({

@@ -5,7 +5,7 @@ import { Popup, POPUP_RESULT } from '../../../../popup.js';
 // @ts-ignore
 import { download } from '../../../../utils.js';
 // @ts-ignore
-import { eventSource, event_types } from '../../../../../script.js';
+import { eventSource, event_types, stopGeneration } from '../../../../../script.js';
 import { createEditor, languageMap, Prism } from './vendor/prism-code-editor/index.js';
 import { defaultCommands } from './vendor/prism-code-editor/extensions/commands.js';
 import { indentGuides } from './vendor/prism-code-editor/extensions/guides.js';
@@ -18,7 +18,7 @@ import './vendor/prism-code-editor/grammars/markdown.js';
 import './vendor/prism-code-editor/grammars/json.js';
 import './vendor/prism-code-editor/grammars/css.js';
 import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
-import { getCollapsedGroups, getLineDiff, getSources } from './SourceManager.js';
+import { getCollapsedGroups, getLineDiff, getPromptInspectorPreviousValue, getPromptInspectorSourceId, getSources, setPromptInspectorSnapshot } from './SourceManager.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
 import { renderSettingsPanel } from './SettingsPanel.js';
@@ -1032,7 +1032,10 @@ export class EveryTextLineEditor {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off')
                 return;
             event.preventDefault();
+            const before = this.dom.masterScrollbar.scrollTop;
             this.dom.masterScrollbar.scrollTop += event.deltaY;
+            if (this.dom.masterScrollbar.scrollTop === before)
+                this.scrollDiffPanesBy(event.deltaY);
         };
         this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true });
         this.editor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
@@ -1045,6 +1048,14 @@ export class EveryTextLineEditor {
         };
         this.editor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true });
         this.oldEditor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true });
+    }
+    scrollDiffPanesBy(deltaY) {
+        if (!this.editor || !this.oldEditor || this.isSyncingScroll)
+            return;
+        this.isSyncingScroll = true;
+        this.editor.scrollContainer.scrollTop += deltaY;
+        this.oldEditor.scrollContainer.scrollTop += deltaY;
+        setTimeout(() => this.isSyncingScroll = false, 0);
     }
     applyScrollSync(from, to) {
         this.isSyncingScroll = true;
@@ -1132,6 +1143,81 @@ export class EveryTextLineEditor {
         for (const event of events) {
             eventSource.on(event, refresh);
             this.sourceEventHandlers.push([event, refresh]);
+        }
+        const inspectChatPrompt = (data) => this.inspectGeneratedPrompt(data, 'chat');
+        const inspectTextPrompt = (data) => this.inspectGeneratedPrompt(data, 'prompt');
+        if ('CHAT_COMPLETION_PROMPT_READY' in event_types) {
+            eventSource.on(event_types.CHAT_COMPLETION_PROMPT_READY, inspectChatPrompt);
+            this.sourceEventHandlers.push([event_types.CHAT_COMPLETION_PROMPT_READY, inspectChatPrompt]);
+        }
+        if ('GENERATE_AFTER_COMBINE_PROMPTS' in event_types) {
+            eventSource.on(event_types.GENERATE_AFTER_COMBINE_PROMPTS, inspectTextPrompt);
+            this.sourceEventHandlers.push([event_types.GENERATE_AFTER_COMBINE_PROMPTS, inspectTextPrompt]);
+        }
+    }
+    async inspectGeneratedPrompt(data, key) {
+        if (!data || data.dryRun || localStorage.getItem(STORAGE.promptInspectorEnabled) !== 'true')
+            return;
+        const prompt = data[key];
+        const value = typeof prompt === 'string' ? prompt : JSON.stringify(prompt ?? '', null, 4);
+        setPromptInspectorSnapshot(value);
+        await this.open();
+        const sourceId = getPromptInspectorSourceId();
+        await this.selectSource(sourceId, { force: true });
+        if (this.selectedSource?.id !== sourceId)
+            return;
+        const previousValue = getPromptInspectorPreviousValue();
+        this.selectedSourceBaseline = value;
+        this.historyCommit = previousValue ? {
+            id: 'prompt-inspector-previous',
+            sourceId,
+            sourceLabel: this.selectedSource.label,
+            sourceGroup: this.selectedSource.group,
+            ...this.getHistoryScope(this.selectedSource),
+            createdAt: Date.now(),
+            parentId: null,
+            reason: 'load',
+            content: previousValue,
+            hash: '',
+            meta: { message: 'previous inspected prompt' },
+        } : undefined;
+        this.setEditorValue(value);
+        this.updateDirty(false);
+        if (!this.diffOpen)
+            this.toggleDiff();
+        else
+            this.renderDiff();
+        const choice = await this.confirmPromptSend();
+        if (choice === 'cancel') {
+            await stopGeneration?.();
+            return;
+        }
+        if (choice === 'discard')
+            return;
+        const output = this.getCurrentEditorValue();
+        if (key === 'prompt') {
+            data.prompt = output;
+            setPromptInspectorSnapshot(output);
+            this.selectedSourceBaseline = output;
+            this.updateDirty(false);
+            return;
+        }
+        try {
+            const chat = JSON.parse(output);
+            if (Array.isArray(chat) && Array.isArray(data.chat)) {
+                data.chat.splice(0, data.chat.length, ...chat);
+                setPromptInspectorSnapshot(output);
+                this.selectedSourceBaseline = output;
+                this.updateDirty(false);
+            }
+            else {
+                throw new Error('Prompt Inspector chat payload must be a JSON array.');
+            }
+        }
+        catch (error) {
+            console.error(`[${NAME}] Invalid prompt inspector JSON`, error);
+            globalThis.toastr?.error?.('Invalid prompt JSON. Generation cancelled.');
+            await stopGeneration?.();
         }
     }
     stopSourceEventListeners() {
@@ -1248,6 +1334,8 @@ export class EveryTextLineEditor {
         const label = source.label.toLowerCase();
         if (id.includes('custom_css') || label.includes('css'))
             return cssLanguage;
+        if (source.group.includes('Prompt Inspector'))
+            return textLanguage;
         if (source.group.includes('Connection Profiles'))
             return jsonLanguage;
         if (source.group.includes('Character Card') && label.includes('json'))
@@ -1321,6 +1409,36 @@ export class EveryTextLineEditor {
         this.renderTree();
         if (this.selectedSidebarTab === 'history')
             this.refreshHistory();
+    }
+    async confirmPromptSend() {
+        if (!this.dom.actionsLeft)
+            return 'discard';
+        this.dom.actionsLeft.innerHTML = '';
+        const notice = document.createElement('span');
+        notice.classList.add('etle--statusItem');
+        notice.textContent = 'Prompt ready to send';
+        const save = this.makeTextButton('Save changes', 'fa-check', () => { });
+        const discard = this.makeTextButton('Discard changes', 'fa-undo', () => { });
+        const cancel = this.makeTextButton('Cancel generation', 'fa-ban', () => { });
+        cancel.classList.add('redWarningBG');
+        this.dom.actionsLeft.append(notice, save, discard, cancel);
+        this.editor?.focus?.();
+        return new Promise((resolve) => {
+            const complete = (choice) => {
+                save.removeEventListener('click', onSave);
+                discard.removeEventListener('click', onDiscard);
+                cancel.removeEventListener('click', onCancel);
+                if (this.dom.actionsLeft?.contains(notice))
+                    this.dom.actionsLeft.innerHTML = '';
+                resolve(choice);
+            };
+            const onSave = () => complete('save');
+            const onDiscard = () => complete('discard');
+            const onCancel = () => complete('cancel');
+            save.addEventListener('click', onSave, { once: true });
+            discard.addEventListener('click', onDiscard, { once: true });
+            cancel.addEventListener('click', onCancel, { once: true });
+        });
     }
     async confirmUnsavedSourceChange(action = 'switch') {
         const actionText = action === 'close'
@@ -2058,8 +2176,16 @@ export class EveryTextLineEditor {
         const saved = this.getDiffOriginalValue();
         const unsaved = this.getCurrentEditorValue();
         const diff = getLineDiff(saved, unsaved);
-        this.oldEditor.setOptions({ value: diff.oldDisplayText });
-        requestAnimationFrame(() => this.highlightDiff(diff));
+        try {
+            this.oldEditor.setOptions({ value: diff.oldDisplayText });
+            requestAnimationFrame(() => this.highlightDiff(diff));
+        }
+        catch (error) {
+            console.warn(`[${NAME}] Prism diff render failed; falling back to unhighlighted text`, error);
+            this.oldEditor.textarea.value = diff.oldDisplayText;
+            this.oldEditor.update?.();
+            requestAnimationFrame(() => this.updateMasterScrollbarHeight());
+        }
     }
     getDiffOriginalValue() {
         const commit = this.historyCommit;
