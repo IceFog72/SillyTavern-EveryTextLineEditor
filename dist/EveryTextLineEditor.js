@@ -1883,7 +1883,7 @@ export class EveryTextLineEditor {
     }
     applyMonacoDiffWordWrapOption() {
         const wordWrap = JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off';
-        this.monacoDiffEditor?.updateOptions?.({ wordWrap });
+        this.monacoDiffEditor?.updateOptions?.({ diffWordWrap: wordWrap });
         this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.({ wordWrap });
         this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.({ wordWrap });
     }
@@ -2562,7 +2562,7 @@ export class EveryTextLineEditor {
             renderSideBySide: true,
             minimap: { enabled: isMonacoMinimapEnabled() },
             scrollBeyondLastLine: false,
-            wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
+            diffWordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
         });
         this.applyMonacoMinimapOption();
         this.applyMonacoDiffWordWrapOption();
