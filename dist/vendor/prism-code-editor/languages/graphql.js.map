@@ -1,0 +1,1 @@
+{"version":3,"file":"graphql.js","names":[],"sources":["../../src/languages/graphql.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.graphql = bracketIndenting({ line: \"#\" })\r\n"],"mappings":";;;AAGA,YAAY,UAAU,iBAAiB,EAAE,MAAM,IAAI,CAAC"}

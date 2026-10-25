@@ -1,8 +1,8 @@
 import { MonacoSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es.js';
-import './vendor/prism-code-editor/grammars/yaml.js';
-import './vendor/prism-code-editor/grammars/markdown.js';
-import './vendor/prism-code-editor/grammars/json.js';
-import './vendor/prism-code-editor/grammars/css.js';
+import './vendor/prism-code-editor/prism/languages/yaml.js';
+import './vendor/prism-code-editor/prism/languages/markdown.js';
+import './vendor/prism-code-editor/prism/languages/json.js';
+import './vendor/prism-code-editor/prism/languages/css.js';
 import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';

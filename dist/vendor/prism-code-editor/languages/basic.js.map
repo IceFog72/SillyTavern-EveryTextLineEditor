@@ -1,0 +1,1 @@
+{"version":3,"file":"basic.js","names":[],"sources":["../../src/languages/basic.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.basic = {\r\n\tcomments: {\r\n\t\tline: \"!\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,QAAQ,EACnB,UAAU,EACT,MAAM,IACP,EACD"}

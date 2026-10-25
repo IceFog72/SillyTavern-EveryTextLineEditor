@@ -1,0 +1,1 @@
+{"version":3,"file":"purebasic.js","names":[],"sources":["../../src/languages/purebasic.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.pbfasm = languageMap.purebasic = bracketIndenting({\r\n\tline: \";\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,SAAS,YAAY,YAAY,iBAAiB,EAC7D,MAAM,IACP,CAAC"}

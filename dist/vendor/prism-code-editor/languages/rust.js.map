@@ -1,0 +1,1 @@
+{"version":3,"file":"rust.js","names":[],"sources":["../../src/languages/rust.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.rust = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,OAAO,iBAAiB"}

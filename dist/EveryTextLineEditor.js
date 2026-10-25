@@ -6,17 +6,18 @@ import { Popup, POPUP_RESULT } from '../../../../popup.js';
 import { download } from '../../../../utils.js';
 // @ts-ignore
 import { eventSource, event_types, stopGeneration } from '../../../../../script.js';
-import { createEditor, languageMap, Prism } from './vendor/prism-code-editor/index.js';
-import { defaultCommands } from './vendor/prism-code-editor/extensions/commands.js';
+import { createEditor, languageMap } from './vendor/prism-code-editor/index.js';
+import { languages } from './vendor/prism-code-editor/prism/index.js';
+import { defaultCommands } from './vendor/prism-code-editor/extensions/commands/index.js';
 import { indentGuides } from './vendor/prism-code-editor/extensions/guides.js';
 import { matchBrackets } from './vendor/prism-code-editor/extensions/matchBrackets/index.js';
 import { highlightBracketPairs } from './vendor/prism-code-editor/extensions/matchBrackets/highlight.js';
 import { searchWidget } from './vendor/prism-code-editor/extensions/search/index.js';
 import { getSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es.js';
-import './vendor/prism-code-editor/grammars/yaml.js';
-import './vendor/prism-code-editor/grammars/markdown.js';
-import './vendor/prism-code-editor/grammars/json.js';
-import './vendor/prism-code-editor/grammars/css.js';
+import './vendor/prism-code-editor/prism/languages/yaml.js';
+import './vendor/prism-code-editor/prism/languages/markdown.js';
+import './vendor/prism-code-editor/prism/languages/json.js';
+import './vendor/prism-code-editor/prism/languages/css.js';
 import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 import { getCollapsedGroups, getLineDiff, getPromptInspectorPreviousValue, getPromptInspectorSourceId, getSources, setPromptInspectorSnapshot } from './SourceManager.js';
 import { HistoryStore } from './HistoryStore.js';
@@ -25,8 +26,8 @@ import { renderSettingsPanel } from './SettingsPanel.js';
 import { isLorebookGroup, openSourceControlDialog, renderSourceTree } from './SourcePanel.js';
 import { getSetting, setSetting } from './settings.js';
 // Disable tag highlighting to prevent misalignment issues
-if (Prism.languages.markdown) {
-    delete Prism.languages.markdown.tag;
+if (languages.markdown) {
+    delete languages.markdown.tag;
 }
 const getIndentMode = () => {
     const stored = getSetting(STORAGE.indentMode, '');
@@ -1013,14 +1014,14 @@ export class EveryTextLineEditor {
         const previousEngine = this.editorEngine;
         this.closeMonacoDiff({ syncValue: true });
         const currentValue = this.editor?.value ?? '';
-        const currentScrollTop = this.editor?.scrollContainer?.scrollTop ?? 0;
+        const currentScrollTop = this.editor?.container?.scrollTop ?? 0;
         const readOnly = !!this.selectedSource?.readonly;
         try {
             const nextEditor = await this.createEditorForEngine(this.dom.editorHost, engine, currentValue, readOnly);
             this.editor?.dispose?.();
-            this.editor?.scrollContainer?.remove();
+            this.editor?.container?.remove();
             this.editor = nextEditor;
-            this.editor.scrollContainer.scrollTop = currentScrollTop;
+            this.editor.container.scrollTop = currentScrollTop;
             this.editorEngine = engine;
             setSetting(STORAGE.editorEngine, engine.id);
             if (this.dom.editorEngine)
@@ -1165,7 +1166,7 @@ export class EveryTextLineEditor {
                 return model.getValue();
             },
             textarea: focusProxy,
-            scrollContainer: container,
+            container,
             wrapper: container,
             setOptions: (options) => {
                 if (typeof options.value === 'string' && options.value !== model.getValue()) {
@@ -1256,8 +1257,8 @@ export class EveryTextLineEditor {
                 return;
             this.isSyncingScroll = true;
             const top = this.dom.masterScrollbar.scrollTop;
-            this.editor.scrollContainer.scrollTop = top;
-            this.oldEditor.scrollContainer.scrollTop = top;
+            this.editor.container.scrollTop = top;
+            this.oldEditor.container.scrollTop = top;
             setTimeout(() => this.isSyncingScroll = false, 0);
         };
         const handleWheel = (event) => {
@@ -1270,23 +1271,23 @@ export class EveryTextLineEditor {
                 this.scrollDiffPanesBy(event.deltaY);
         };
         this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true, signal });
-        this.editor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false, signal });
-        this.oldEditor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false, signal });
+        this.editor.container.addEventListener('wheel', handleWheel, { passive: false, signal });
+        this.oldEditor.container.addEventListener('wheel', handleWheel, { passive: false, signal });
         const syncFromEditor = (from, to) => {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off' || this.isSyncingScroll)
                 return;
             this.applyScrollSync(from, to);
             this.dom.masterScrollbar.scrollTop = from.scrollTop;
         };
-        this.editor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true, signal });
-        this.oldEditor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true, signal });
+        this.editor.container.addEventListener('scroll', () => syncFromEditor(this.editor.container, this.oldEditor.container), { passive: true, signal });
+        this.oldEditor.container.addEventListener('scroll', () => syncFromEditor(this.oldEditor.container, this.editor.container), { passive: true, signal });
     }
     scrollDiffPanesBy(deltaY) {
         if (!this.editor || !this.oldEditor || this.isSyncingScroll)
             return;
         this.isSyncingScroll = true;
-        this.editor.scrollContainer.scrollTop += deltaY;
-        this.oldEditor.scrollContainer.scrollTop += deltaY;
+        this.editor.container.scrollTop += deltaY;
+        this.oldEditor.container.scrollTop += deltaY;
         setTimeout(() => this.isSyncingScroll = false, 0);
     }
     applyScrollSync(from, to) {
@@ -1320,9 +1321,9 @@ export class EveryTextLineEditor {
     syncDiffScroll() {
         if (!this.editor || !this.oldEditor || !this.diffOpen)
             return;
-        this.applyScrollSync(this.editor.scrollContainer, this.oldEditor.scrollContainer);
+        this.applyScrollSync(this.editor.container, this.oldEditor.container);
         if (this.dom.masterScrollbar) {
-            this.dom.masterScrollbar.scrollTop = this.editor.scrollContainer.scrollTop;
+            this.dom.masterScrollbar.scrollTop = this.editor.container.scrollTop;
         }
     }
     scheduleDiffScrollSync() {
@@ -1924,7 +1925,7 @@ export class EveryTextLineEditor {
         setSetting(STORAGE.spellCheck, enabled);
         this.applySpellCheckToTextArea(this.editor?.textarea);
         this.applySpellCheckToTextArea(this.oldEditor?.textarea);
-        this.applySpellCheckToMonaco(this.editor?.scrollContainer);
+        this.applySpellCheckToMonaco(this.editor?.container);
         this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
         this.editor?.setOptions({ spellCheck: enabled });
         if (enabled) {
@@ -2570,9 +2571,9 @@ export class EveryTextLineEditor {
             this.dom.masterScrollContent.style.height = '1px';
             return;
         }
-        const height = Math.max(this.editor.scrollContainer.scrollHeight, this.oldEditor.scrollContainer.scrollHeight);
+        const height = Math.max(this.editor.container.scrollHeight, this.oldEditor.container.scrollHeight);
         this.dom.masterScrollContent.style.height = `${height}px`;
-        this.dom.masterScrollbar.scrollTop = this.editor.scrollContainer.scrollTop;
+        this.dom.masterScrollbar.scrollTop = this.editor.container.scrollTop;
     }
     renderDiff() {
         if (!this.oldEditor)

@@ -1,0 +1,1 @@
+{"version":3,"file":"al.js","names":[],"sources":["../../src/languages/al.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.al = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,KAAK,iBAAiB"}

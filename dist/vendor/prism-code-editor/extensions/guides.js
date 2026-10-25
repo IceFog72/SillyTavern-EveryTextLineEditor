@@ -1,70 +1,105 @@
-import { a as k } from "../index-svJglgH1.js";
-import "../prismCore-AxbjJFmh.js";
-const A = k(
-  '<div style="position:relative;display:inline-block"> </div>',
-  "left:var(--padding-left)",
-  "guide-indents"
-), G = k(
-  "",
-  "width:1px;position:absolute;background:var(--bg-guide-indent)"
-), E = () => {
-  let u, g = 0, v, f = -1, h;
-  const p = [], I = [], m = A.cloneNode(!0), L = m.lastChild, b = [], N = (e) => {
-    v = [];
-    const l = w(e.split(`
-`)), a = l.length;
-    for (let t = 0, o = [], n = l[0]; n; t++) {
-      const { style: s } = p[t] || (p[t] = G.cloneNode()), [d, r, c] = n, i = I[t];
-      n = l[t + 1], d != i?.[0] && (s.top = d + "00%"), r != i?.[1] && (s.height = r + "00%"), c != i?.[2] && (s.left = c + "00%");
-      const x = o[0] != d && n?.[0] != d, C = o[0] + o[1] != d + r && n?.[0] + n?.[1] != d + r;
-      for (let y = -x, z = r + C; y < z; y++)
-        v[y + d] = t;
-      o = I[t] = l[t];
-    }
-    for (let t = g; t > a; )
-      p[--t].remove();
-    L.append(...p.slice(g, g = a));
-  }, S = () => {
-    const e = v[h.activeLineNumber - 1] ?? -1;
-    e != f && (f > -1 && (p[f].className = ""), e > -1 && (p[e].className = "active")), f = e;
-  }, w = (e) => {
-    const l = e.length, a = [], t = [];
-    for (let o = 0, n = -1, s = 0, d = 0; ; s++) {
-      const r = s == l, c = r ? 0 : b[s] = j(e[s]);
-      if (c == -1)
-        n == -1 && (n = s);
-      else {
-        for (let i = c; i < o; i++)
-          a[i][1] = (n > -1 && (i > c || r) ? n : s) - a[i][0];
-        for (let i = o; i < c; )
-          t[d++] = a[i] = [
-            n == -1 || i > o ? s : n,
-            0,
-            i++ * u
-          ];
-        n = -1, o = c;
-      }
-      if (r)
-        break;
-    }
-    return b.length = l, t;
-  }, j = (e) => {
-    let l = e.search(/\S/), a = 0;
-    if (l == -1)
-      return -1;
-    for (let t = 0; t < l; )
-      a += e[t++] == "	" ? u - a % u : 1;
-    return Math.ceil(a / u);
-  };
-  return {
-    lines: L.children,
-    indentLevels: b,
-    update(e, l) {
-      h || (h = e, e.extensions.indentGuides = this, e.overlays.append(m), e.addListener("update", N), e.addListener("selectionChange", S)), m.style.display = l.wordWrap ? "none" : "", u != (u = l.tabSize || 2) && (N(e.value), S());
-    }
-  };
+import { i as doc, r as createTemplate } from "../core-BIWFpCIO.js";
+//#region src/extensions/guides.ts
+/** @module guides */
+var template = /* @__PURE__ */ createTemplate("<div class=guide-indents>	");
+/**
+* Extension adding indent guides to an editor. Does not work with word wrap.
+* Requires styles from `prism-code-editor/guides.css`
+*/
+var indentGuides = () => {
+	let tabSize;
+	let prevLength = 0;
+	let lineIndentMap;
+	let active;
+	let currentEditor;
+	let lines = [];
+	let indents = [];
+	let container;
+	let update = (code) => {
+		lineIndentMap = [];
+		const newIndents = getIndentGuides(code, tabSize);
+		const l = newIndents.length;
+		for (let i = 0, prev = [], next = newIndents[0]; next; i++) {
+			const style = (lines[i] ||= doc.createElement("div")).style;
+			const [top, left, height] = next;
+			const old = indents[i];
+			next = newIndents[i + 1];
+			if (top != old?.[0]) style.top = top + "00%";
+			if (left != old?.[1]) style.left = left + "00%";
+			if (height != old?.[2]) style.height = height + "00%";
+			const isSingleIndent = prev[0] != top && next?.[0] != top, isSingleOutdent = prev[0] + prev[1] != top + height && next?.[0] + next?.[1] != top + height;
+			for (let j = -isSingleIndent, l = height + isSingleOutdent; j < l; j++) lineIndentMap[j + top] = i;
+			prev = indents[i] = newIndents[i];
+		}
+		for (let i = l; i < prevLength;) lines[i++].remove();
+		container.append(...lines.slice(prevLength, prevLength = l));
+	};
+	let updateActive = () => {
+		const newActive = lines[lineIndentMap[currentEditor.activeLine - 1]];
+		if (newActive != active) {
+			if (active) active.className = "";
+			if (newActive) newActive.className = "active-indent";
+			active = newActive;
+		}
+	};
+	return { update(editor, options) {
+		if (currentEditor != editor) {
+			currentEditor = editor;
+			let overlays = editor.lines[0];
+			if (container = overlays.querySelector(".guide-indents")) {
+				lines.push(...container.children);
+				active = lines.find((line) => line.className);
+			} else overlays.append(container = template());
+			editor.on("update", update);
+			editor.on("selectionChange", updateActive);
+		}
+		container.style.display = options.wordWrap ? "none" : "";
+		if (tabSize != (tabSize = options.tabSize || 2)) {
+			update(editor.value);
+			updateActive();
+		}
+	} };
 };
-export {
-  E as indentGuides
+/**
+* Calculates the position and height of indentation guides for a string of code.
+* @param code Code you want to calculate indentation lines for.
+* @param tabSize Number of spaces a tab is equal to.
+* @returns An array of indentation guides.
+* Each guide is a tuple containing 3 numbers with the following values:
+* - The starting line of the guide.
+* - How many tabs the guide is offset to the right.
+* - How many lines tall the guide is.
+*/
+var getIndentGuides = (code, tabSize) => {
+	const lines = code.split("\n");
+	const l = lines.length;
+	const stack = [];
+	const results = [];
+	for (let prevIndent = 0, emptyPos = -1, i = 0, p = 0;; i++) {
+		let last = i == l;
+		let line = lines[i];
+		let pos = last ? 0 : line.search(/\S/);
+		let indent = 0;
+		let j = 0;
+		if (pos < 0) {
+			if (emptyPos < 0) emptyPos = i;
+		} else {
+			for (; j < pos;) indent += line[j++] == "	" ? tabSize - indent % tabSize : 1;
+			if (indent) indent = Math.ceil(indent / tabSize);
+			for (j = indent; j < prevIndent; j++) stack[j][2] = (emptyPos < 0 || j == indent && !last ? i : emptyPos) - stack[j][0];
+			for (j = prevIndent; j < indent;) results[p++] = stack[j] = [
+				emptyPos < 0 || j > prevIndent ? i : emptyPos,
+				j++,
+				0
+			];
+			emptyPos = -1;
+			prevIndent = indent;
+		}
+		if (last) break;
+	}
+	return results;
 };
+//#endregion
+export { getIndentGuides, indentGuides };
+
 //# sourceMappingURL=guides.js.map

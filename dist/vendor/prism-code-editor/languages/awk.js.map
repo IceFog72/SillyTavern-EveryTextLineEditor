@@ -1,0 +1,1 @@
+{"version":3,"file":"awk.js","names":[],"sources":["../../src/languages/awk.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.awk = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,MAAM,iBAAiB,EAClC,MAAM,IACP,CAAC"}

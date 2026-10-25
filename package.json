@@ -21,7 +21,7 @@
     "diff": "^9.0.0",
     "monaco-editor": "^0.57.0",
     "monaco-spellchecker": "^0.6.0",
-    "prism-code-editor": "^2.4.1",
+    "prism-code-editor": "^5.4.0",
     "typo-js": "^1.4.0"
   },
   "devDependencies": {

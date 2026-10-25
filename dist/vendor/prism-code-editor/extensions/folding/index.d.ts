@@ -1,12 +1,11 @@
-/** @module code-folding */
-import { Extension, PrismEditor } from "../..";
+import { Extension, PrismEditor } from '../../index.js';
 /**
  * Callback used to add extra foldable ranges to an editor.
  * @param editor Editor the folding ranges are added to.
  * @param currentFolds The ranges that are currently foldable.
  * @returns An array of extra foldable ranges.
  */
-export type FoldingRangeProvider = (editor: PrismEditor, currentFolds: [number, number][]) => [number, number][];
+export type FoldingRangeProvider = (editor: PrismEditor, currentFolds: [number, number][]) => [number, number][] | undefined;
 export interface ReadOnlyCodeFolding extends Extension {
     /** The code in the editor with no ranges collapsed. */
     readonly fullCode: string;
@@ -27,14 +26,27 @@ export interface ReadOnlyCodeFolding extends Extension {
 /**
  * Extension only supporting read-only editors which adds code folding to the editor.
  *
- * To fold XML elements, a {@link TagMatcher} needs to be added before.
+ * @param providers By default, this extension does not add any foldable ranges and you
+ * must add folding range providers. This package defines multiple folding range providers
+ * you can import like {@link bracketFolding}, {@link tagFolding},
+ * {@link blockCommentFolding}, and {@link markdownFolding}. You can also define your own
+ * providers.
  *
- * To fold bracket pairs, a {@link BracketMatcher} needs to be added before.
- *
- * @param providers Callbacks that can add extra foldable ranges.
  * Very minimal downsides to adding this extension dynamically.
+ *
+ * Requires styles from `prism-code-editor/code-folding.css`
  */
 declare const readOnlyCodeFolding: (...providers: FoldingRangeProvider[]) => ReadOnlyCodeFolding;
+/**
+ * Folding range provider that adds folding of square, round, and curly brackets.
+ * Requires a {@link BracketMatcher} added to the editor to work.
+ */
+declare const bracketFolding: FoldingRangeProvider;
+/**
+ * Folding range provider that adds folding of HTML/XML elements.
+ * Requires a {@link TagMatcher} added to the editor to work.
+ */
+declare const tagFolding: FoldingRangeProvider;
 /**
  * Folding range provider that allows folding of block comments. For this to work,
  * you need to befine block comments in the {@link languageMap} for the language.
@@ -48,4 +60,4 @@ declare const blockCommentFolding: FoldingRangeProvider;
  * Simply pass this function as one of the arguments when calling {@link readOnlyCodeFolding}.
  */
 declare const markdownFolding: FoldingRangeProvider;
-export { readOnlyCodeFolding, markdownFolding, blockCommentFolding };
+export { readOnlyCodeFolding, markdownFolding, blockCommentFolding, tagFolding, bracketFolding };

@@ -1,144 +1,243 @@
-import { a as T, n as x, l as A } from "../../index-svJglgH1.js";
-import { g as N } from "../../utils-qtFp4SO6.js";
-import "../../prismCore-AxbjJFmh.js";
-const S = T("<div> </div>", "", "pce-fold"), j = T(" <span title='Unfold'>   </span> ", "", "pce-unfold"), U = (...b) => {
-  let u, c, g, h, k, o, m, y;
-  const s = /* @__PURE__ */ new Set(), a = /* @__PURE__ */ new Set(), F = (e) => {
-    let r = e;
-    for (let [p, t] of a)
-      if (e > p) {
-        if (e < t)
-          return -1;
-        r -= t - p - 3;
-      }
-    return r;
-  }, d = (e) => {
-    const r = o[e][0], p = (t) => {
-      let [l, n] = o[t], i;
-      for (let f of a)
-        l <= f[0] && n > f[0] && (i ? a.delete(f) : (f[0] = l, n > f[1] && (f[1] = n), i = !0));
-      i || a.add([l, n]);
-    };
-    if (s.has(e)) {
-      s.delete(e);
-      for (let t of a)
-        if (r == t[0]) {
-          a.delete(t);
-          for (let l of s)
-            o[l][0] > r && p(l);
-          break;
-        }
-    } else
-      s.add(e), p(e);
-  }, w = () => {
-    c = "";
-    let e = 0, r = [], p = [...a].sort((t, l) => t[0] - l[0]);
-    for (let [t, l] of p)
-      c += g.slice(e, t) + "   ", r[x(c)] = x(g, t, e = l);
-    k.value = c += g.slice(e), k.dispatchEvent(new Event("input"));
-    for (let t = 1, l = 0, n = h.length; t < n; t++)
-      h[t].setAttribute("data-line", l += r[t - 1] || 1);
-    u.scrollContainer.style.setProperty(
-      "--number-width",
-      Math.ceil(Math.log10(x(g))) + 1e-3 + "ch"
-    ), v();
-  }, v = () => {
-    for (let e = 0, r = o.length; e < r; e++) {
-      if (!o[e])
-        continue;
-      let p = F(o[e][0]);
-      if (p + 1) {
-        let t = h[x(c, 0, p)], l = m[e], n = s.has(e);
-        if (l || (l = m[e] = S.cloneNode(!0), l.onclick = () => L(e)), t != l.parentNode && !t.querySelector(".pce-fold") && t.prepend(l), l.classList.toggle("closed-fold", n), l.title = `${n ? "Unf" : "F"}old line`, l = y[e], n) {
-          l || (l = y[e] = j.cloneNode(!0));
-          const i = F(o[e][1]), [f, E, P] = l.childNodes;
-          f.data = N(c, p), P.data = /.*/.exec(c.slice(i))[0], E.onclick = () => L(e), t != l.parentNode && t.prepend(l);
-        } else
-          l?.remove();
-      }
-    }
-  }, L = (e) => {
-    d(e), w(), u.setSelection(F(o[e][0]));
-  }, C = () => {
-    m = [], y = [], o = [], a.clear(), s.clear(), c = g = u.value;
-    const e = [], { matchTags: r, matchBrackets: p } = u.extensions;
-    if (r) {
-      let { tags: t, pairs: l } = r;
-      for (let n = 0, i, f = l.length; n < f; n++)
-        (i = l[n]) > n && x(c, t[n][3], t[i][1]) > 1 && e.push([t[n][3], t[i][1]]);
-    }
-    if (p) {
-      let { brackets: t, pairs: l } = p;
-      for (let n = 0, i, f = l.length; n < f; n++)
-        (i = l[n]) > n && t[n][3] != "(" && x(c, t[n][1], t[i][1]) > 1 && e.push([t[n][1] + t[n][3].length, t[i][1]]);
-    }
-    b.forEach((t) => e.push(...t(u, e)));
-    for (let t = 0, l = e.length; t < l; t++) {
-      const [n, i] = e[t], f = x(c, 0, n);
-      (!o[f] || i > o[f][1]) && (o[f] = [n, i]);
-    }
-    v();
-  };
-  return {
-    update(e, r) {
-      u || (u = e, k = e.textarea, e.extensions.codeFold = this, h = e.wrapper.children, e.tokens[0] && C()), e.scrollContainer.style.setProperty(
-        "--padding-left",
-        r.lineNumbers == !1 ? "calc(var(--_pse) + var(--_ns))" : ""
-      ), e.addListener("update", C), setTimeout(e.removeListener, 0, "update", C);
-    },
-    get fullCode() {
-      return g;
-    },
-    toggleFold: (e, r) => !!o[e] && s.has(e) != r && !d(e),
-    updateFolds: w
-  };
-}, R = ({ tokens: b, value: u, options: { language: c } }) => {
-  const g = [], h = (k, o, m) => {
-    for (let y = 0, s = k.length; y < s; ) {
-      const a = k[y++], F = a.content, d = a.length, w = a.type, v = a.alias || w;
-      if (v === "comment" && x(u, o, o + d) > 1) {
-        let L = A[m]?.comments?.block;
-        L && u.indexOf(L[0], o) == o && g.push([o + L[0].length, o + d - L[1].length]);
-      } else
-        Array.isArray(F) && h(
-          F,
-          o,
-          v.indexOf("language-") ? m : v.slice(9)
-        );
-      o += d;
-    }
-  };
-  return h(b, 0, c), g;
-}, _ = ({ tokens: b, value: u, options: { language: c } }) => {
-  let g = [], h = 0, k = [], o = (m) => {
-    let y = u.slice(0, h).trimEnd().length;
-    for (let s = m - 1; s < k.length; s++)
-      g.push([k[s], y]);
-  };
-  if (c == "markdown" || c == "md")
-    for (let m = 0, y = b.length - 1; ; m++) {
-      const s = b[m], a = s.length, F = s.type;
-      if (F == "code" && !s.alias) {
-        let d = s.content;
-        g.push([
-          h + d[0].length + (d[1].content || "").length,
-          h + a - d[d.length - 1].length - 1
-        ]);
-      }
-      if (F == "title") {
-        let [d, w] = s.content, v = d.type ? d.length : w.content[0] == "=" ? 1 : 2;
-        o(v), k.length = v, k[v - 1] = h + (d.type ? a : d.length - 1);
-      }
-      if (h += a, m == y) {
-        o(1);
-        break;
-      }
-    }
-  return g;
+import { c as numLines, r as createTemplate, s as languageMap, t as addListener } from "../../core-BIWFpCIO.js";
+import { C as updateNode, a as getLineBefore, v as getLineEnd } from "../../utils--SPWoSa0.js";
+//#region src/extensions/folding/index.ts
+/** @module code-folding */
+var template = /* @__PURE__ */ createTemplate("<div><div> ");
+var template2 = /* @__PURE__ */ createTemplate("<div class=pce-unfold> <span title=Unfold>\xA0\xA0\xA0</span> ");
+var isMultiline = (str, start, end) => str.slice(start, end).includes("\n");
+/**
+* Extension only supporting read-only editors which adds code folding to the editor.
+*
+* @param providers By default, this extension does not add any foldable ranges and you
+* must add folding range providers. This package defines multiple folding range providers
+* you can import like {@link bracketFolding}, {@link tagFolding},
+* {@link blockCommentFolding}, and {@link markdownFolding}. You can also define your own
+* providers.
+*
+* Very minimal downsides to adding this extension dynamically.
+*
+* Requires styles from `prism-code-editor/code-folding.css`
+*/
+var readOnlyCodeFolding = (...providers) => {
+	let cEditor;
+	let value;
+	let code;
+	let lines;
+	let lineNumberWidth;
+	let textarea;
+	let foldPositions;
+	const foldToggles = [];
+	const foldPlaceholders = [];
+	const foldedLines = /* @__PURE__ */ new Set();
+	const foldedRanges = /* @__PURE__ */ new Set();
+	const getPosition = (pos) => {
+		let result = pos;
+		for (let [start, end] of foldedRanges) if (pos > start) {
+			if (pos < end) return -1;
+			result -= end - start - 3;
+		}
+		return result;
+	};
+	const toggleFold = (line) => {
+		const start = foldPositions[line][0];
+		const addFold = (line) => {
+			let [start, end] = foldPositions[line];
+			let expanded;
+			for (let range of foldedRanges) if (start <= range[0] && end > range[0]) {
+				if (expanded) foldedRanges.delete(range);
+				else {
+					range[0] = start;
+					if (end > range[1]) range[1] = end;
+					expanded = true;
+				}
+			}
+			if (!expanded) foldedRanges.add([start, end]);
+		};
+		if (foldedLines.has(line)) {
+			foldedLines.delete(line);
+			for (let range of foldedRanges) if (start == range[0]) {
+				foldedRanges.delete(range);
+				for (let currentLine of foldedLines) if (foldPositions[currentLine][0] > start) addFold(currentLine);
+				break;
+			}
+		} else {
+			foldedLines.add(line);
+			addFold(line);
+		}
+	};
+	const update = (line) => {
+		value = "";
+		let pos = 0;
+		for (let [start, end] of [...foldedRanges].sort((a, b) => a[0] - b[0])) {
+			value += code.slice(pos, start) + "\xA0\xA0\xA0";
+			pos = end;
+		}
+		textarea.value = value += code.slice(pos);
+		if (line) textarea.setSelectionRange(pos = getPosition(foldPositions[line][0]), pos);
+		cEditor.update();
+		cEditor.container.style.setProperty("--number-width", lineNumberWidth);
+		updateFolds();
+	};
+	const updateFolds = () => {
+		for (let line = 0, l = foldPositions.length, prev; line < l; line++) {
+			if (!foldPositions[line]) continue;
+			let pos = getPosition(foldPositions[line][0]);
+			if (pos + 1) {
+				let parent = lines[numLines(value, 0, pos)];
+				let el = foldToggles[line];
+				let isClosed = foldedLines.has(line);
+				let pos2 = getPosition(foldPositions[line][1]);
+				if (!el) {
+					el = foldToggles[line] = template();
+					addListener(el, "click", () => toggleAndUpdate(line));
+				}
+				if (parent != el.parentNode && parent != prev) parent.prepend(el);
+				prev = parent;
+				el.className = `pce-fold${isClosed ? " closed-fold" : ""}`;
+				el.title = `${isClosed ? "Unf" : "F"}old line`;
+				el = foldPlaceholders[line];
+				if (isClosed) {
+					if (!el) {
+						el = foldPlaceholders[line] = template2();
+						addListener(el, "click", () => toggleAndUpdate(line));
+					}
+					el.style.counterIncrement = `line ${numLines(code, ...foldPositions[line]) - 1}`;
+					updateNode(el.firstChild, getLineBefore(value, pos));
+					updateNode(el.lastChild, value.slice(pos2, getLineEnd(value, pos2)));
+					if (parent != el.parentNode) parent.prepend(el);
+				} else el?.remove();
+			}
+		}
+	};
+	const toggleAndUpdate = (line) => {
+		toggleFold(line);
+		update(line);
+	};
+	const createFolds = () => {
+		foldPositions = [];
+		foldedRanges.clear();
+		foldedLines.clear();
+		value = code = cEditor.value;
+		lineNumberWidth = (0 | Math.log10(numLines(code))) + 1 + ".001ch";
+		const folds = [];
+		providers.forEach((clb) => folds.push(...clb(cEditor, folds) || []));
+		for (let i = 0, l = folds.length; i < l; i++) {
+			const [start, end] = folds[i];
+			const index = numLines(value, 0, start);
+			if (!foldPositions[index] || end > foldPositions[index][1]) foldPositions[index] = [start, end];
+		}
+		updateFolds();
+	};
+	return {
+		update(editor, options) {
+			if (cEditor != editor) {
+				cEditor = editor;
+				textarea = editor.textarea;
+				editor.extensions.codeFold = this;
+				lines = editor.lines;
+				if (editor.tokens[0]) createFolds();
+			}
+			editor.container.style.setProperty("--padding-left", options.lineNumbers == false ? "calc(var(--_pse) + var(--_ns))" : "");
+			setTimeout(editor.on("update", createFolds));
+		},
+		get fullCode() {
+			return code;
+		},
+		toggleFold: (lineNumber, force) => !!foldPositions[lineNumber] && foldedLines.has(lineNumber) != force && !toggleFold(lineNumber),
+		updateFolds: () => update()
+	};
 };
-export {
-  R as blockCommentFolding,
-  _ as markdownFolding,
-  U as readOnlyCodeFolding
+/**
+* Folding range provider that adds folding of square, round, and curly brackets.
+* Requires a {@link BracketMatcher} added to the editor to work.
+*/
+var bracketFolding = ({ value, extensions: { matchBrackets } }) => {
+	if (matchBrackets) {
+		let folds = [];
+		let { brackets, pairs } = matchBrackets;
+		let i = 0;
+		let j;
+		let l = pairs.length;
+		for (; i < l; i++) if ((j = pairs[i]) > i && isMultiline(value, brackets[i][1], brackets[j][1])) folds.push([brackets[i][2], brackets[j][1]]);
+		return folds;
+	}
 };
+/**
+* Folding range provider that adds folding of HTML/XML elements.
+* Requires a {@link TagMatcher} added to the editor to work.
+*/
+var tagFolding = ({ value, extensions: { matchTags } }) => {
+	if (matchTags) {
+		let folds = [];
+		let { tags, pairs } = matchTags;
+		let i = 0;
+		let j;
+		let l = pairs.length;
+		for (; i < l; i++) if ((j = pairs[i]) > i && isMultiline(value, tags[i][2], tags[j][1])) folds.push([tags[i][2], tags[j][1]]);
+		return folds;
+	}
+};
+/**
+* Folding range provider that allows folding of block comments. For this to work,
+* you need to befine block comments in the {@link languageMap} for the language.
+*
+* Simply pass this function as one of the arguments when calling {@link readOnlyCodeFolding}.
+*/
+var blockCommentFolding = ({ tokens, value, options: { language } }) => {
+	const folds = [];
+	const findBlockComments = (tokens, position, language) => {
+		for (let i = 0, l = tokens.length; i < l;) {
+			const token = tokens[i++];
+			const content = token.content;
+			const length = token.length;
+			const aliasType = token.alias || token.type;
+			if (aliasType == "comment" && isMultiline(value, position, position + length)) {
+				let comment = languageMap[language]?.comments?.block;
+				if (comment && value.indexOf(comment[0], position) == position) folds.push([position + comment[0].length, position + length - comment[1].length]);
+			} else if (Array.isArray(content)) findBlockComments(content, position, aliasType.slice(0, 9) == "language-" ? aliasType.slice(9) : language);
+			position += length;
+		}
+	};
+	findBlockComments(tokens, 0, language);
+	return folds;
+};
+/**
+* Folding range provider that allows folding of titles and code blocks in markdown.
+*
+* Simply pass this function as one of the arguments when calling {@link readOnlyCodeFolding}.
+*/
+var markdownFolding = ({ tokens, value, options: { language } }) => {
+	if (language == "markdown" || language == "md") {
+		let folds = [];
+		let pos = 0;
+		let openTitles = [];
+		let levels;
+		let closeTitles = (level) => {
+			for (let end = value.slice(0, pos).trimEnd().length; level <= levels;) folds.push([openTitles[level++], end]);
+		};
+		let i = 0;
+		let l = tokens.length;
+		for (; i < l;) {
+			const token = tokens[i++];
+			const length = token.length;
+			const type = token.type;
+			if (type == "code" && !token.alias) {
+				let content = token.content;
+				folds.push([pos + content[0].length + (content[1].content || "").length, pos + length - content[content.length - 1].length - 1]);
+			}
+			if (type == "title") {
+				let [token1, token2] = token.content;
+				let level = token1.type ? token1.length - 1 : token2.content[0] == "=" ? 0 : 1;
+				closeTitles(level);
+				openTitles[levels = level] = pos + (token1.type ? length : token1.length - 1);
+			}
+			pos += length;
+		}
+		closeTitles(0);
+		return folds;
+	}
+};
+//#endregion
+export { blockCommentFolding, bracketFolding, markdownFolding, readOnlyCodeFolding, tagFolding };
+
 //# sourceMappingURL=index.js.map

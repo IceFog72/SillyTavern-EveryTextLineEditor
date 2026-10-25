@@ -1,0 +1,1 @@
+{"version":3,"file":"scala.js","names":[],"sources":["../../src/languages/scala.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.scala = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,QAAQ,iBAAiB"}

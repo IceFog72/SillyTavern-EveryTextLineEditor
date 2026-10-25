@@ -1,0 +1,253 @@
+import { a as languages, c as tokenize, l as tokenizeText } from "../../core-Dr0o9A-8.js";
+import { i as clikePunctuation } from "../../patterns-DSInPV_c.js";
+import { t as embeddedIn } from "../../templating-BdhIX5ID.js";
+import "./markup.js";
+//#region src/prism/languages/php.js
+var backslashPunctuation = { "punctuation": /\\/ };
+var comment = /\/\*[^]*?\*\/|\/\/.*|#(?!\[).*/;
+var constant = [
+	{
+		pattern: /\b(?:false|true)\b/i,
+		alias: "boolean"
+	},
+	{
+		pattern: /(::\s*)\b[a-z_]\w*\b(?!\s*\()/gi,
+		lookbehind: true
+	},
+	{
+		pattern: /(\b(?:case|const)\s+)\b[a-z_]\w*(?=\s*[;=])/gi,
+		lookbehind: true
+	},
+	/\b(?:null)\b/i,
+	/\b[A-Z_][A-Z\d_]*\b(?!\s*\()/
+];
+var number = /\b0b[01]+(?:_[01]+)*\b|\b0o[0-7]+(?:_[0-7]+)*\b|\b0x[a-f\d]+(?:_[a-f\d]+)*\b|(?:\b\d+(?:_\d+)*\.?(?:\d+(?:_\d+)*)?|\B\.\d+)(?:e[+-]?\d+)?/i;
+var operator = /<?=>|\?\?=?|\.{3}|\??->|[!=]==|::|--|\+\+|&&|\*\*=?|\|\||>>|<<|[?~]|[.%&|^!=<>/*+-]=?/;
+var stringInterpolation = {
+	pattern: /\{\$(?:[^{}]|\{(?:[^{}]|\{[^}]+\})*\})*\}|(^|[^\\{])\$+(?:\w+(?:\[[^\n[\]]*\]|->\w+)?)/,
+	lookbehind: true
+};
+var string = [
+	{
+		pattern: /<<<'([^']+)'\n(?:.*\n)*?\1;/g,
+		alias: "nowdoc-string",
+		inside: { "delimiter": {
+			pattern: /^<<<'[^']+'|[a-z_]\w*;$/i,
+			alias: "symbol",
+			inside: { "punctuation": /^<<<'?|[';]$/ }
+		} }
+	},
+	{
+		pattern: /<<<(?:"([^"]+)"\n(?:.*\n)*?\1;|([a-z_]\w*)\n(?:.*\n)*?\2;)/gi,
+		alias: "heredoc-string",
+		inside: {
+			"delimiter": {
+				pattern: /^<<<(?:"[^"]+"|[a-z_]\w*)|[a-z_]\w*;$/i,
+				alias: "symbol",
+				inside: { "punctuation": /^<<<"?|[";]$/ }
+			},
+			"interpolation": stringInterpolation
+		}
+	},
+	{
+		pattern: /`(?:\\[^]|[^\\`])*`/g,
+		alias: "backtick-quoted-string"
+	},
+	{
+		pattern: /'(?:\\[^]|[^\\'])*'/g,
+		alias: "single-quoted-string"
+	},
+	{
+		pattern: /"(?:\\[^]|[^\\"])*"/g,
+		alias: "double-quoted-string",
+		inside: { "interpolation": stringInterpolation }
+	}
+];
+var php = stringInterpolation.inside = {
+	"delimiter": {
+		pattern: /^<\?(?:php(?=\s)|=)?|\?>$/gi,
+		alias: "important"
+	},
+	"doc-comment": {
+		pattern: /\/\*\*(?!\/)[^]*?\*\//g,
+		alias: "comment",
+		inside: "phpdoc"
+	},
+	"comment": comment,
+	"string": string,
+	"attribute": {
+		pattern: /#\[(?:[^"'\/#]|\/(?![*/])|\/\/.*$|#(?!\[).*$|\/\*(?:[^*]|\*(?!\/))*\*\/|"(?:\\[^]|[^\\"])*"|'(?:\\[^]|[^\\'])*')+\](?=\s*[a-z$#])/gim,
+		inside: {
+			"attribute-content": {
+				pattern: /^(..)[^]+(?=.)/,
+				lookbehind: true,
+				inside: {
+					"comment": comment,
+					"string": string,
+					"attribute-class-name": [{
+						pattern: /([^:]|^)\b[a-z_]\w*(?!\\)\b/gi,
+						lookbehind: true,
+						alias: "class-name"
+					}, {
+						pattern: /([^:]|^)(?:\\?\b[a-z_]\w*)+/gi,
+						lookbehind: true,
+						alias: "class-name class-name-fully-qualified",
+						inside: backslashPunctuation
+					}],
+					"constant": constant,
+					"number": number,
+					"operator": operator,
+					"punctuation": clikePunctuation
+				}
+			},
+			"delimiter": {
+				pattern: /.+/,
+				alias: "punctuation"
+			}
+		}
+	},
+	"variable": /\$+(?:\w+|(?=\{))/,
+	"package": {
+		pattern: /(namespace\s+|use\s+(?:function\s+)?)(?:\\?\b[a-z_]\w*)+\b(?!\\)/i,
+		lookbehind: true,
+		inside: backslashPunctuation
+	},
+	"class-name-definition": {
+		pattern: /(\b(?:class|enum|interface|trait)\s+)\b[a-z_]\w*(?!\\)\b/i,
+		lookbehind: true,
+		alias: "class-name"
+	},
+	"function-definition": {
+		pattern: /(\bfunction\s+)[a-z_]\w*(?=\s*\()/i,
+		lookbehind: true,
+		alias: "function"
+	},
+	"keyword": [
+		{
+			pattern: /(\(\s*)\b(?:array|bool|boolean|float|int|integer|object|string)\b(?=\s*\))/gi,
+			lookbehind: true,
+			alias: "type-casting"
+		},
+		{
+			pattern: /([(,?]\s*)\b(?:array(?!\s*\()|bool|callable|(?:false|null)(?=\s*\|)|float|int|iterable|mixed|object|self|static|string)\b(?=\s*\$)/gi,
+			lookbehind: true,
+			alias: "type-hint"
+		},
+		{
+			pattern: /(\)\s*:\s*(?:\?\s*)?)\b(?:array(?!\s*\()|bool|callable|(?:false|null)(?=\s*\|)|float|int|iterable|mixed|never|object|self|static|string|void)\b/gi,
+			lookbehind: true,
+			alias: "return-type"
+		},
+		{
+			pattern: /\b(?:array(?!\s*\()|bool|float|int|iterable|mixed|object|string|void)\b|(\|\s*)(?:false|null)\b|\b(?:false|null)(?=\s*\|)/gi,
+			lookbehind: true,
+			alias: "type-declaration"
+		},
+		{
+			pattern: /\b(?:parent|self|static)(?=\s*::)/gi,
+			alias: "static-context"
+		},
+		{
+			pattern: /(\byield\s+)from\b|\bclass\b/gi,
+			lookbehind: true
+		},
+		{
+			pattern: /((?:^|[^\s>:]|(?:^|[^-])>|(?:^|[^:]):)\s*)\b(?:abstract|and|array|as|break|callable|case|catch|clone|const|continue|declare|default|die|do|echo|else|elseif|empty|enddeclare|endfor|endforeach|endif|endswitch|endwhile|enum|eval|exit|extends|final|finally|fn|[fx]?or|foreach|function|global|goto|if|implements|include|include_once|instanceof|insteadof|interface|isset|list|match|namespace|never|new|parent|print|private|protected|public|readonly|require|require_once|return|self|static|switch|throw|trait|try|unset|use|var|while|yield|__halt_compiler)\b/i,
+			lookbehind: true
+		}
+	],
+	"argument-name": {
+		pattern: /([(,]\s*)\b[a-z_]\w*(?=\s*:(?!:))/i,
+		lookbehind: true
+	},
+	"class-name": [
+		{
+			pattern: /(\b(?:extends|implements|instanceof|new(?!\s+self|\s+static))\s+|\bcatch\s*\()\b[a-z_]\w*(?!\\)\b/gi,
+			lookbehind: true
+		},
+		{
+			pattern: /(\|\s*)\b[a-z_]\w*(?!\\)\b|\b[a-z_]\w*(?!\\)\b(?=\s*\|)/gi,
+			lookbehind: true
+		},
+		{
+			pattern: /(\|\s*)(?:\\?\b[a-z_]\w*)+\b|(?:\\?\b[a-z_]\w*)+\b(?=\s*\|)/gi,
+			lookbehind: true,
+			alias: "class-name-fully-qualified",
+			inside: backslashPunctuation
+		},
+		{
+			pattern: /(\b(?:extends|implements|instanceof|new(?!\s+self\b|\s+static\b))\s+|\bcatch\s*\()(?:\\?\b[a-z_]\w*)+\b(?!\\)/gi,
+			lookbehind: true,
+			alias: "class-name-fully-qualified",
+			inside: backslashPunctuation
+		},
+		{
+			pattern: /\b[a-z_]\w*(?=\s*\$)/gi,
+			alias: "type-declaration"
+		},
+		{
+			pattern: /(?:\\?\b[a-z_]\w*)+(?=\s*\$)/gi,
+			alias: "class-name-fully-qualified type-declaration",
+			inside: backslashPunctuation
+		},
+		{
+			pattern: /\b[a-z_]\w*(?=\s*::)/gi,
+			alias: "static-context"
+		},
+		{
+			pattern: /(?:\\?\b[a-z_]\w*)+(?=\s*::)/gi,
+			alias: "class-name-fully-qualified static-context",
+			inside: backslashPunctuation
+		},
+		{
+			pattern: /([(,?]\s*)[a-z_]\w*(?=\s*\$)/gi,
+			lookbehind: true,
+			alias: "type-hint"
+		},
+		{
+			pattern: /([(,?]\s*)(?:\\?\b[a-z_]\w*)+(?=\s*\$)/gi,
+			lookbehind: true,
+			alias: "class-name-fully-qualified type-hint",
+			inside: backslashPunctuation
+		},
+		{
+			pattern: /(\)\s*:\s*(?:\?\s*)?)\b[a-z_]\w*(?!\\)\b/gi,
+			alias: "return-type",
+			lookbehind: true
+		},
+		{
+			pattern: /(\)\s*:\s*(?:\?\s*)?)(?:\\?\b[a-z_]\w*)+\b(?!\\)/gi,
+			lookbehind: true,
+			alias: "class-name-fully-qualified return-type",
+			inside: backslashPunctuation
+		}
+	],
+	"constant": constant,
+	"function": {
+		pattern: /(^|[^\\\w])\\?[a-z_](?:[\w\\]*\w)?(?=\s*\()/i,
+		lookbehind: true,
+		inside: backslashPunctuation
+	},
+	"property": {
+		pattern: /(->\s*)\w+/,
+		lookbehind: true
+	},
+	"number": number,
+	"operator": operator,
+	"punctuation": clikePunctuation
+};
+var embedded = embeddedIn("html");
+languages.php = {
+	"php": {
+		pattern: /<\?(?:[^"'/#]|\/(?![*/])|(["'])(?:\\[^]|(?!\1)[^\\])*\1|(?:\/\/|#(?!\[))(?:[^\n?]|\?(?!>))*(?=$|\?>|\n)|#\[|\/\*(?:[^*]|\*(?!\/))*(?:\*\/|$))*?(?:\?>|$)/,
+		alias: "language-php",
+		inside: php
+	},
+	[tokenize]: (code, grammar) => {
+		if (code.includes("<?")) return embedded(code, grammar);
+		return tokenizeText(code, php);
+	}
+};
+//#endregion
+
+//# sourceMappingURL=php.js.map

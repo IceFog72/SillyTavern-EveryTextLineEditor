@@ -1,0 +1,1 @@
+{"version":3,"file":"powerquery.js","names":[],"sources":["../../src/languages/powerquery.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.mscript = languageMap.pq = languageMap.powerquery = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,UAAU,YAAY,KAAK,YAAY,aAAa,iBAAiB"}

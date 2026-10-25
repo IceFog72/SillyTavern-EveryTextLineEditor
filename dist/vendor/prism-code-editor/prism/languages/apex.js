@@ -1,0 +1,57 @@
+import { a as languages } from "../../core-Dr0o9A-8.js";
+import { a as clikeString, i as clikePunctuation, n as clikeComment } from "../../patterns-DSInPV_c.js";
+import { n as re, r as replace } from "../../shared-oTKIFAwH.js";
+import "./sql.js";
+//#region src/prism/languages/apex.js
+var keywords = /\b(?:(?:after|before)(?=\s+[a-z])|abstract|activate|an[dy]|array|asc?|autonomous|begin|bigdecimal|blob|boolean|break|bulk|by|byte|cas[et]|catch|char|class|collect|commit|const|continue|currency|date|datetime|decimal|default|delete|desc|do|double|else|end|enum|exception|exit|export|extends|final|finally|float|for|from|get(?=\s*[{};])|global|goto|group|having|hint|if|implements|import|inner|insert|instanceof|integer|interface|into?|in|join|like|limit|list|long|loop|map|merge|new|not|nulls?|number|o[fnr]|outer|override|package|parallel|pragma|private|protected|public|retrieve|return|rollback|select|set|short|s?object|sort|static|string|super|switch|synchronized|system|testmethod|[tw]hen|this|throw|time|transaction|transient|trigger|try|undelete|update|upsert|using|virtual|void|webservice|where|while|(?:inherited|with|without)\s+sharing)\b/i;
+var className = replace("\\b(?:(?=[a-z_]\\w*\\s*[<\\[])|(?!<0>))[A-Z_]\\w*(?:\\s*\\.\\s*[A-Z_]\\w*)*\\b(?:\\s*(?:\\[\\s*\\]|<(?:[^<>]|<(?:[^<>]|<[^<>]*>)*>)*>))*", [keywords.source]);
+/** @param {string} pattern */
+var insertClassName = (pattern) => re(pattern, [className], "i");
+var classNameInside = {
+	"keyword": keywords,
+	"punctuation": /[()[\]{}.,:;<>]/
+};
+languages.apex = {
+	"comment": clikeComment,
+	"string": clikeString,
+	"sql": {
+		pattern: /((?:[=,({:]|\breturn)\s*)\[[^[\]]*\]/gi,
+		lookbehind: true,
+		alias: "language-sql",
+		inside: "sql"
+	},
+	"annotation": {
+		pattern: /@\w+/,
+		alias: "punctuation"
+	},
+	"class-name": [
+		{
+			pattern: insertClassName("(\\b(?:class|enum|extends|implements|instanceof|interface|new|trigger\\s+\\w+\\s+on)\\s+)<0>"),
+			lookbehind: true,
+			inside: classNameInside
+		},
+		{
+			pattern: insertClassName("(\\(\\s*)<0>(?=\\s*\\)\\s*[\\w(])"),
+			lookbehind: true,
+			inside: classNameInside
+		},
+		{
+			pattern: insertClassName("<0>(?=\\s*\\w+\\s*[;=,(){:])"),
+			inside: classNameInside
+		}
+	],
+	"trigger": {
+		pattern: /(\btrigger\s+)\w+/i,
+		lookbehind: true,
+		alias: "class-name"
+	},
+	"keyword": keywords,
+	"function": /\b[a-z_]\w*(?=\s*\()/i,
+	"boolean": /\b(?:false|true)\b/i,
+	"number": /(?:\B\.\d+|\b\d+(?:\.\d+|l)?)\b/i,
+	"operator": /\?\.?|&&|\|\||--|\+\+|(?:[!=]=|<<|>>>?|[&|^!=<>/*+-])=?|:/,
+	"punctuation": clikePunctuation
+};
+//#endregion
+
+//# sourceMappingURL=apex.js.map

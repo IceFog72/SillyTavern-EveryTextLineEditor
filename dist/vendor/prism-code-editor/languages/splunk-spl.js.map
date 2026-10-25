@@ -1,0 +1,1 @@
+{"version":3,"file":"splunk-spl.js","names":[],"sources":["../../src/languages/splunk-spl.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap[\"splunk-spl\"] = bracketIndenting({\r\n\tblock: ['`comment(\"', '\")`'],\r\n})\r\n"],"mappings":";;;AAGA,YAAY,gBAAgB,iBAAiB,EAC5C,OAAO,CAAC,eAAc,MAAK,EAC5B,CAAC"}

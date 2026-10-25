@@ -1,4 +1,5 @@
 @import url('./dist/vendor/prism-code-editor/layout.css');
+@import url('./dist/vendor/prism-code-editor/guides.css');
 @import url('./dist/vendor/prism-code-editor/search.css');
 @import url('./dist/vendor/prism-code-editor/themes/vs-code-dark.css');
 
@@ -910,22 +911,29 @@
     pointer-events: none;
 }
 
+/* content-box keeps the tint off the line-number gutter; the number colour marks it instead. */
+.etle--showDiff .pce-line.etle--diffRemoved,
+.etle--showDiff .pce-line.etle--diffAdded,
+.etle--showDiff .pce-line.etle--diffPlaceholder {
+    background-clip: content-box;
+}
+
 .etle--showDiff .pce-line.etle--diffRemoved {
-    background: rgba(164, 52, 58, 0.34);
+    background-color: rgba(164, 52, 58, 0.34);
 }
 
 .etle--showDiff .pce-line.etle--diffAdded {
-    background: rgba(54, 129, 70, 0.34);
+    background-color: rgba(54, 129, 70, 0.34);
 }
 
 .etle--showDiff .pce-line.etle--diffPlaceholder {
-    background: rgba(255, 255, 255, 0.035);
+    background-color: rgba(255, 255, 255, 0.035);
 }
 
 .etle--showDiff .pce-line.etle--diffPlaceholder::after {
     content: '';
     position: absolute;
-    inset: 1px 0;
+    inset: 1px 0 1px var(--padding-left);
     pointer-events: none;
     background-image: repeating-linear-gradient(125deg,
             rgba(255, 255, 255, 0.055) 0,
@@ -1258,6 +1266,24 @@
 
 .pce-line {
     box-sizing: border-box !important;
+}
+
+/* Other extensions load unscoped prism-code-editor 2.x layout CSS (line margins,
+   attr(data-line) numbers). Re-assert the 5.x line layout inside this panel. */
+#etle--panel .prism-code-editor .pce-line {
+    padding: 0 var(--_pse) 0 var(--padding-left);
+    margin: 0;
+}
+
+#etle--panel .prism-code-editor.show-line-numbers .pce-line::before {
+    counter-increment: line;
+    content: counter(line);
+    color: var(--pce-line-number);
+}
+
+#etle--panel .prism-code-editor.pce-wrap .pce-line::before {
+    position: absolute;
+    margin: 0;
 }
 
 .etle--triggerSelectWrap {

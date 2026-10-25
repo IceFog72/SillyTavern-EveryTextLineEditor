@@ -1,26 +1,52 @@
-import { b as h } from "../../utils-qtFp4SO6.js";
-import "../../index-svJglgH1.js";
-import "../../prismCore-AxbjJFmh.js";
-const m = () => ({
-  update(s) {
-    this.update = () => {
-    };
-    let i, c = -1, t = [], r = ([n, e] = s.getSelection()) => {
-      let a = n == e && (i = s.extensions.matchBrackets) && s.focused && u(e) || -1;
-      a != c && (l(), a + 1 ? (t = [i.pairs[a], a].map(
-        (o) => h(s, ".punctuation", 0, -1, i.brackets[o][1])
-      ), t[0].nextSibling == t[1] && (t[0].textContent += t[1].textContent, t[1].textContent = "", t[1] = t[0]), l(!0)) : t = [], c = a);
-    }, u = (n) => {
-      for (let e = 0, { brackets: a, pairs: o } = i, g; g = a[++e]; )
-        if (!g[4] && g[1] > n - 2 && a[o[e]]?.[1] <= n)
-          return e;
-    }, l = (n) => t.forEach((e) => e.classList.toggle("active-bracket", !!n)), p = addEventListener.bind(s.textarea);
-    p("blur", () => r()), p("focus", () => r()), s.addListener("selectionChange", r), s.addListener("update", () => {
-      l(), c = -1;
-    });
-  }
-});
-export {
-  m as highlightBracketPairs
+import { _ as addTextareaListener, n as getClosestToken } from "../../utils--SPWoSa0.js";
+//#region src/extensions/matchBrackets/highlight.ts
+/**
+* Extension adding a `selectionChange` handler to highlight the bracker pair closest to
+* the cursor.
+*
+* You must to add a {@link BracketMatcher} to your editor for this extension to work.
+*
+* The `.active-bracket` CSS selector can be used to highlight the brackets.
+*/
+var highlightBracketPairs = () => (editor) => {
+	let prev;
+	let els = [];
+	let selectionChange = () => {
+		let matcher = editor.extensions.matchBrackets;
+		let [start, end] = editor.getSelection();
+		if (matcher) {
+			let brackets = matcher.brackets;
+			let pairs = matcher.pairs;
+			let opening;
+			let closing;
+			if (editor.focused && start == end) {
+				for (let i = 0, bracket; bracket = brackets[++i];) if (!bracket[5] && bracket[2] >= end && brackets[pairs[i]]?.[1] <= end) {
+					opening = brackets[pairs[i]];
+					closing = bracket;
+					break;
+				}
+			}
+			if (closing != prev) {
+				toggleActive();
+				if (closing) {
+					els = [opening, closing].map((bracket) => getClosestToken(editor, ".punctuation", 0, -1, bracket[1]));
+					if (els[0] != els[1] && opening[2] == closing[1]) {
+						els[0].textContent += els[1].textContent;
+						els[1].textContent = "";
+						els[1] = els[0];
+					}
+					toggleActive(true);
+				} else els = [];
+			}
+			prev = closing;
+		}
+	};
+	let toggleActive = (add) => els.forEach((el) => el.classList.toggle("active-bracket", !!add));
+	addTextareaListener(editor, "focus", selectionChange);
+	addTextareaListener(editor, "blur", selectionChange);
+	editor.on("selectionChange", selectionChange);
 };
+//#endregion
+export { highlightBracketPairs };
+
 //# sourceMappingURL=highlight.js.map

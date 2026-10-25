@@ -1,36 +1,30 @@
-import { l as g } from "../index-svJglgH1.js";
-import { b as f } from "../utils-qtFp4SO6.js";
-import { c as h, i as C } from "../patterns-JQzfU8Ac.js";
-import "../prismCore-AxbjJFmh.js";
-const r = /(?:^|[^\w$])<(?:(?!\d)([^\s>\/=<%]+)(?:(?:\s|\/\/.*(?!.)|\/\*(?:[^*]|\*(?!\/))*\*\/)+(?:[^\s{*<>\/=]+(?:(?:\s|\/\/.*(?!.)|\/\*(?:[^*]|\*(?!\/))*\*\/)*=\s*(?:"[^"]*"|'[^']*'|[^\s{'"\/>=]+|(?:\{(?:\{(?:\{[^{}]*\}|[^{}])*\}|[^{}])*\})))?|(?:\{(?:\s|\/\/.*(?!.)|\/\*(?:[^*]|\*(?!\/))*\*\/)*\.{3}(?:[^{}]|(?:\{(?:\{(?:\{[^{}]*\}|[^{}])*\}|[^{}])*\}))*\})))*(?:\s|\/\/.*(?!.)|\/\*(?:[^*]|\*(?!\/))*\*\/)*)?>[ \t]*$/, k = /^<\/(?!\d)[^\s>\/=<%]*\s*>/, T = ({ tags: t, pairs: s }, { brackets: e, pairs: c }, m) => {
-  for (let i = t.length, n, l = 0; n = t[--i]; )
-    if (n[3] > m && n[1] < m)
-      l = n[1];
-    else if (n[2] < 2 && !n[5] && n[1] >= l && n[3] <= m && !(t[s[i]]?.[1] < m)) {
-      for (let a = e.length, o; o = e[--a]; )
-        if (o[1] >= n[3] && o[1] < m && o[3] == "{" && !(e[c[a]]?.[1] < m))
-          return;
-      return !0;
-    }
-}, x = {
-  line: "//",
-  block: ["/*", "*/"]
-}, j = {
-  block: ["{/*", "*/}"]
+import { s as languageMap } from "../core-BIWFpCIO.js";
+import { a as getLineBefore, n as getClosestToken } from "../utils--SPWoSa0.js";
+import { n as re } from "../shared-oTKIFAwH.js";
+import { n as braces, r as space } from "../jsx-shared-BgBgis07.js";
+import { a as clikeIndent, i as clikeComment, n as autoCloseTags, u as testBracketPair } from "../shared-DXMiLwjC.js";
+//#region src/languages/jsx.ts
+var openingTag = re("(?:^|[^\\w$])<(?:(?!\\d)([^\\s%=<>/]+)(?:(?:<0>|<0>*<(?:[^<>=]|=[^<]|=?<(?:[^<>]|<[^<>]*>)*>)*>)(?:<0>*(?:[^\\s\"'{=<>/*]+(?:<0>*=<0>*(?!\\s)(?:\"[^\"]*\"|'[^']*'|<1>)?|(?=[\\s/>]))|<1>))*)?<0>*)?>[ 	]*$", [space, braces]);
+var closingTag = /^<\/(?!\d)[^\s%=<>/]*\s*>/;
+var inJsxContext = ({ tags, pairs }, { brackets, pairs: bracketPairs }, position) => {
+	for (let i = tags.length, tag, min = 0; tag = tags[--i];) if (tag[2] > position && tag[1] < position) min = tag[1];
+	else if (!tag[4] && tag[5] && tag[1] >= min && tag[2] <= position && !(tags[pairs[i]]?.[1] < position)) {
+		for (let i = brackets.length, bracket; bracket = brackets[--i];) if (bracket[1] >= tag[2] && bracket[1] < position && bracket[4] == "{" && !(brackets[bracketPairs[i]]?.[1] < position)) return;
+		return true;
+	}
 };
-g.jsx = g.tsx = {
-  comments: x,
-  getComments(t, s) {
-    const { matchBrackets: e, matchTags: c } = t.extensions;
-    return (e && c ? T(c, e, s) : f(t, ".plain-text", 0, 0, s)) ? j : x;
-  },
-  autoIndent: [
-    ([t], s) => r.test(s = s.slice(0, t)) || h.test(s),
-    ([t, s], e) => C.test(e[t - 1] + e[s]) || r.test(e.slice(0, t)) && k.test(e.slice(s))
-  ],
-  autoCloseTags([t, s], e) {
-    const c = t == s && (e.slice(0, t) + ">").match(r);
-    return c ? `</${c[1] || ""}>` : "";
-  }
+var jsxComment = { block: ["{/*", "*/}"] };
+languageMap.jsx = languageMap.tsx = {
+	comments: clikeComment,
+	getComments(editor, position) {
+		const { matchBrackets, matchTags } = editor.extensions;
+		return (matchBrackets && matchTags ? inJsxContext(matchTags, matchBrackets, position) : getClosestToken(editor, ".plain-text", 0, 0, position)) ? jsxComment : clikeComment;
+	},
+	autoIndent: [([start], value) => openingTag.test(value.slice(0, start)) || clikeIndent.test(getLineBefore(value, start)), (selection, value) => testBracketPair(selection, value) || openingTag.test(value.slice(0, selection[0])) && closingTag.test(value.slice(selection[1]))],
+	autoCloseTags: ([start, end], value, editor) => {
+		return autoCloseTags(editor, start, end, value, openingTag);
+	}
 };
+//#endregion
+
 //# sourceMappingURL=jsx.js.map

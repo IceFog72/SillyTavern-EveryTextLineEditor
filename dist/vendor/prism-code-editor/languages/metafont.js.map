@@ -1,0 +1,1 @@
+{"version":3,"file":"metafont.js","names":[],"sources":["../../src/languages/metafont.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.metafont = bracketIndenting({\r\n\tline: \"%\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,WAAW,iBAAiB,EACvC,MAAM,IACP,CAAC"}

@@ -1,15 +1,18 @@
-/** @module web-component */
-import { PrismEditor } from "./types";
+import { PrismEditor } from './types.js';
+import { EditorTheme } from './themes/index.js';
 export interface PrismEditorElement extends HTMLElement {
-    readonly editor: PrismEditor;
+    readonly editor: PrismEditor<{
+        theme: EditorTheme;
+    }>;
     value: string;
-    theme: string;
+    theme: EditorTheme;
     language: string;
     tabSize: number;
     insertSpaces: boolean;
     lineNumbers: boolean;
     readOnly: boolean;
     wordWrap: boolean;
+    rtl: boolean;
     addEventListener(type: "ready", listener: (this: PrismEditorElement, ev: CustomEvent) => any, options?: boolean | AddEventListenerOptions): void;
     addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: PrismEditorElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
     addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
@@ -27,11 +30,6 @@ export declare const addMinimalEditor: (name: string) => void;
  * @param name Name of the custom element. Must be a valid custom element name.
  */
 export declare const addBasicEditor: (name: string) => void;
-/**
- * Adds a custom element wrapping the {@link fullEditor} setup.
- * @param name Name of the custom element. Must be a valid custom element name.
- */
-export declare const addFullEditor: (name: string) => void;
 /**
  * Adds a custom element wrapping the {@link readonlyEditor} setup.
  * @param name Name of the custom element. Must be a valid custom element name.

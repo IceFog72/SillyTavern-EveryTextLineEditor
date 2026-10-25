@@ -1,17 +1,7 @@
-import { l as o } from "../index-svJglgH1.js";
-import { a, o as i, i as c, x as l } from "../patterns-JQzfU8Ac.js";
-import "../prismCore-AxbjJFmh.js";
-o.xml = o.ssml = o.atom = o.rss = o.mathml = o.svg = {
-  comments: {
-    block: ["<!--", "-->"]
-  },
-  autoIndent: [
-    ([t], s) => a.test(s = s.slice(0, t)) || i.test(s),
-    ([t, s], m) => c.test(m[t - 1] + m[s]) || a.test(m.slice(0, t)) && l.test(m.slice(s))
-  ],
-  autoCloseTags([t, s], m) {
-    const e = t == s && (m.slice(0, t) + ">").match(a);
-    return e ? `</${e[1]}>` : "";
-  }
-};
+import { s as languageMap } from "../core-BIWFpCIO.js";
+import { c as markupLanguage } from "../shared-DXMiLwjC.js";
+//#region src/languages/xml.ts
+languageMap.xml = languageMap.ssml = languageMap.atom = languageMap.rss = languageMap.mathml = languageMap.svg = markupLanguage();
+//#endregion
+
 //# sourceMappingURL=xml.js.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"typoscript.js","names":[],"sources":["../../src/languages/typoscript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.tsconfig = languageMap.typoscript = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,WAAW,YAAY,aAAa,iBAAiB"}

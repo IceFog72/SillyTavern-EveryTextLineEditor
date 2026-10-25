@@ -1,0 +1,1 @@
+{"version":3,"file":"dot.js","names":[],"sources":["../../src/languages/dot.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.gv = languageMap.dot = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,KAAK,YAAY,MAAM,iBAAiB"}

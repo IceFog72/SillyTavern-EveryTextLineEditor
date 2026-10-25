@@ -1,0 +1,1 @@
+{"version":3,"file":"go-module.js","names":[],"sources":["../../src/languages/go-module.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap[\"go-mod\"] = languageMap[\"go-module\"] = bracketIndenting({\r\n\tline: \"//\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,YAAY,YAAY,eAAe,iBAAiB,EACnE,MAAM,KACP,CAAC"}

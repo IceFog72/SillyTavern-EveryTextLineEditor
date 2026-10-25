@@ -1,0 +1,1 @@
+{"version":3,"file":"jq.js","names":[],"sources":["../../src/languages/jq.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.jq = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,KAAK,iBAAiB,EACjC,MAAM,IACP,CAAC"}

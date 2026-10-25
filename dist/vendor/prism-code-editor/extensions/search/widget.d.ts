@@ -1,7 +1,7 @@
-import { Extension } from "../..";
-export interface SearchWidget extends Extension {
+import { BasicExtension } from '../../index.js';
+export interface SearchWidget extends BasicExtension {
     /** The search widget's outer element. */
-    readonly widgetEl: HTMLDivElement;
+    readonly element: HTMLDivElement;
     /**
      * Hides the search widget and removes most event listeners.
      * @param focusTextarea Whether the editor's `textarea` should gain focus. Defaults to true.
@@ -16,5 +16,8 @@ export interface SearchWidget extends Extension {
 /**
  * Extension that adds a widget for search and replace functionality.
  * This extension needs styles from `prism-code-editor/search.css`.
+ *
+ * Once added to an editor the widget can be opened/closed programmatically with the
+ * `editor.extensions.searchWidget` object.
  */
 export declare const searchWidget: () => SearchWidget;

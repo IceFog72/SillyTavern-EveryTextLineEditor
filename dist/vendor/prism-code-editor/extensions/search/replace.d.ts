@@ -1,5 +1,5 @@
-import { PrismEditor } from "../..";
-import { SearchAPI } from "./search";
+import { PrismEditor } from '../../index.js';
+import { SearchAPI } from './search.js';
 /**
  * Object with methods useful for performing a search
  * and both highlighting and replacing the matches.
@@ -17,15 +17,17 @@ export interface ReplaceAPI extends SearchAPI {
      */
     selectMatch(index: number, scrollPadding?: number): void;
     /**
-     * If a match is selected, it's replaced with the specified value.
-     * If not, the closest match will be selected and the index is returned.
+     * If a match is selected and it's different to the provided string, it's replaced,
+     * else the index of the closest match is returned.
+     * If there's no selected match, the index of the closest match is returned.
      */
-    replace(value: string): number | undefined;
+    replace(replacement: string): number | undefined;
     /**
-     * @param value Value
+     * Replaces all search matches with the specified string.
+     * @param replacement String to replace all matches with.
      * @param selection Does nothing. Kept for backwards compatibility.
      */
-    replaceAll(value: string, selection?: [number, number]): void;
+    replaceAll(replacement: string, selection?: [number, number]): void;
     /** Removes the highlight container from the DOM and all potential event listeners. */
     destroy(): void;
 }

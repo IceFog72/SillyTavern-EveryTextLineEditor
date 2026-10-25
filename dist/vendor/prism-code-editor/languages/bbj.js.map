@@ -1,0 +1,1 @@
+{"version":3,"file":"bbj.js","names":[],"sources":["../../src/languages/bbj.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.bbj = {\r\n\tcomments: {\r\n\t\tline: \"REM\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,MAAM,EACjB,UAAU,EACT,MAAM,MACP,EACD"}

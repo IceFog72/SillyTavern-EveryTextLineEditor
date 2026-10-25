@@ -115,7 +115,7 @@ export interface TextSource {
 export interface PrismEditorLike {
     value: string;
     textarea: HTMLTextAreaElement;
-    scrollContainer: HTMLElement;
+    container: HTMLElement;
     wrapper: HTMLElement;
     setOptions(options: Record<string, any>): void;
     update?(): void;

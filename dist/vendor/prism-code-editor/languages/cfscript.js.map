@@ -1,0 +1,1 @@
+{"version":3,"file":"cfscript.js","names":[],"sources":["../../src/languages/cfscript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.cfscript = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,WAAW,iBAAiB"}

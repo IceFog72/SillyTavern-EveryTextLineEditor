@@ -1,0 +1,1 @@
+{"version":3,"file":"nim.js","names":[],"sources":["../../src/languages/nim.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.nim = bracketIndenting({\r\n\tline: \"#\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,MAAM,iBAAiB,EAClC,MAAM,IACP,CAAC"}

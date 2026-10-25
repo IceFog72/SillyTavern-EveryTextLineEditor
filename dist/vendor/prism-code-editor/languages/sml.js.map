@@ -1,0 +1,1 @@
+{"version":3,"file":"sml.js","names":[],"sources":["../../src/languages/sml.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.smlnj = languageMap.sml = bracketIndenting({\r\n\tblock: [\"(*\", \"*)\"],\r\n})\r\n"],"mappings":";;;AAGA,YAAY,QAAQ,YAAY,MAAM,iBAAiB,EACtD,OAAO,CAAC,MAAM,IAAI,EACnB,CAAC"}

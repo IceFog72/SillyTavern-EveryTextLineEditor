@@ -1,0 +1,1 @@
+{"version":3,"file":"rest.js","names":[],"sources":["../../src/languages/rest.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.rest = {\r\n\tcomments: {\r\n\t\tline: \"..\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,OAAO,EAClB,UAAU,EACT,MAAM,KACP,EACD"}
