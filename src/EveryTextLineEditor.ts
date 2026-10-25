@@ -2003,6 +2003,7 @@ export class EveryTextLineEditor {
     startSourceWatcher() {
         this.stopSourceWatcher();
         this.sourceWatchTimer = window.setInterval(() => {
+            if (document.hidden || !this.dom.root?.classList.contains('openDrawer')) return;
             this.refreshSelectedSourceBaseline().catch((error) => console.warn(`[${NAME}] Failed to refresh selected source`, error));
         }, 500);
     }
@@ -2704,7 +2705,7 @@ export class EveryTextLineEditor {
         } else if (!this.diffOpen) {
             this.closeMonacoDiff({ syncValue: true });
             this.applyMonacoMinimapOption();
-            this.renderDiff();
+            this.clearDiffMarks();
         } else {
             this.renderDiff();
         }
@@ -2730,6 +2731,7 @@ export class EveryTextLineEditor {
     renderDiff() {
         if (!this.oldEditor) return;
         this.updateDiffSideLabels();
+        if (!this.diffOpen) return;
         if (this.diffOpen && this.editorEngine.id === 'monaco') {
             this.updateMonacoDiffModels();
             return;
@@ -2782,6 +2784,11 @@ export class EveryTextLineEditor {
         this.applyDiffMarks(this.oldEditor, diff.oldMarks, 'removed');
         this.applyDiffMarks(this.editor, diff.newMarks, 'added');
         this.updateMasterScrollbarHeight();
+    }
+
+    clearDiffMarks() {
+        this.applyDiffMarks(this.oldEditor, [], 'removed');
+        this.applyDiffMarks(this.editor, [], 'added');
     }
 
     applyDiffMarks(editor, marks, activeMark) {
@@ -2914,6 +2921,7 @@ export class EveryTextLineEditor {
     }
 
     updateDirty(isDirty) {
+        const wasDirty = this.dirty;
         this.dirty = !!isDirty;
         this.dom.root?.classList.toggle('etle--dirty', this.dirty);
         this.dom.root?.classList.toggle('etle--sourceChanged', this.selectedSourceChanged);
@@ -2922,7 +2930,7 @@ export class EveryTextLineEditor {
         if (this.dom.apply) this.dom.apply.disabled = !this.dirty || this.selectedSource?.readonly;
         if (this.dom.revert) this.dom.revert.disabled = !this.dirty;
         this.updateStatusBar();
-        if (this.selectedSidebarTab === 'history') this.refreshHistory();
+        if (wasDirty !== this.dirty && this.selectedSidebarTab === 'history') this.refreshHistory();
     }
 
     async open() {

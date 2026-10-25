@@ -218,6 +218,7 @@ export declare class EveryTextLineEditor {
     };
     updateDiffSideLabels(): void;
     highlightDiff(diff: any): void;
+    clearDiffMarks(): void;
     applyDiffMarks(editor: any, marks: any, activeMark: any): void;
     getCurrentEditorValue(): any;
     getMonacoLanguageId(): "markdown" | "json" | "yaml" | "css" | "plaintext";
