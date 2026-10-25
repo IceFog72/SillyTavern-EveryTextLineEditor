@@ -57,7 +57,7 @@ function renderSharedEditorSettings(host: SettingsPanelHost): HTMLElement {
     wrapButton.dataset.setting = 'wrap';
     const spellButton = host.makeTextButton('Spell Check', 'fa-spell-check', () => host.setSpellCheck(!isSpellCheckEnabled()));
     spellButton.dataset.setting = 'spell';
-    const autoCollapseButton = host.makeTextButton('Auto-Collapse Sidebar', 'fa-sidebar', () => host.setAutoCollapseSidebar(!isAutoCollapseSidebarEnabled()));
+    const autoCollapseButton = host.makeTextButton('Auto-Collapse Sidebar', 'fa-table-columns', () => host.setAutoCollapseSidebar(!isAutoCollapseSidebarEnabled()));
     autoCollapseButton.dataset.setting = 'autoCollapseSidebar';
     autoCollapseButton.title = 'Automatically collapse the sidebar when the panel width is below 800 px';
     const editorButtons = document.createElement('div');

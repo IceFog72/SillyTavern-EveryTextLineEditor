@@ -540,7 +540,9 @@ export class EveryTextLineEditor {
 
         this.dom.diff = this.makeTextButton('Diff', 'fa-code-branch', () => this.toggleDiff());
         this.dom.revert = this.makeTextButton('', 'fa-undo', () => this.revert());
+        this.dom.revert.title = 'Revert to saved text';
         this.dom.apply = this.makeTextButton('', 'fa-check', () => this.apply());
+        this.dom.apply.title = 'Apply and save (Ctrl+S)';
 
         actionsRight.append(this.dom.diff, this.dom.revert, this.dom.apply, this.makeIconButton('fa-times', 'Close editor', () => this.close().catch((error) => console.error(`[${NAME}] Failed to close editor`, error))));
 
@@ -2382,7 +2384,10 @@ export class EveryTextLineEditor {
         const source = this.selectedSource;
         if (!source) return;
         if (this.dom.currentGroup) this.dom.currentGroup.textContent = source.group;
-        if (this.dom.currentTitle) this.dom.currentTitle.textContent = source.label;
+        if (this.dom.currentTitle) {
+            this.dom.currentTitle.textContent = source.label;
+            this.dom.currentTitle.title = source.label;
+        }
         if (this.dom.editName) this.dom.editName.hidden = !source.metadata?.name;
 
         if (this.dom.actionsLeft) {
@@ -2636,14 +2641,22 @@ export class EveryTextLineEditor {
             this.dom.statusScrollSync.classList.toggle('etle--statusActive', this.scrollSyncMode.id !== 'off');
         }
         this.dom.root?.classList.toggle('etle--syncOff', this.scrollSyncMode.id === 'off');
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="wrap"]')?.classList.toggle('etle--activeButton', wrapEnabled);
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="spell"]')?.classList.toggle('etle--activeButton', spellCheckEnabled);
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="ignoreFullJsonHistory"]')?.classList.toggle('etle--activeButton', isFullJsonHistoryIgnored());
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="autoCollapseSidebar"]')?.classList.toggle('etle--activeButton', getSetting<boolean>(STORAGE.autoCollapseSidebar, true));
+        const settingStates: Record<string, boolean> = {
+            wrap: wrapEnabled,
+            spell: spellCheckEnabled,
+            ignoreFullJsonHistory: isFullJsonHistoryIgnored(),
+            autoCollapseSidebar: getSetting<boolean>(STORAGE.autoCollapseSidebar, true),
+            minimap: minimapEnabled,
+        };
+        for (const [key, active] of Object.entries(settingStates)) {
+            const button = this.dom.settingsPanel?.querySelector<HTMLButtonElement>(`[data-setting="${key}"]`);
+            button?.classList.toggle('etle--activeButton', active);
+            button?.setAttribute('aria-pressed', String(active));
+        }
         const minimapSetting = this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="minimap"]');
-        minimapSetting?.classList.toggle('etle--activeButton', minimapEnabled);
         if (minimapSetting) {
-            minimapSetting.textContent = minimapForcedOff ? 'Monaco Minimap: Off in Diff' : 'Monaco Minimap';
+            // Update the label span only; the first child is the icon.
+            if (minimapSetting.lastElementChild) minimapSetting.lastElementChild.textContent = minimapForcedOff ? 'Minimap: off in Diff' : 'Minimap';
             minimapSetting.title = minimapForcedOff
                 ? 'Minimap is saved as on, but disabled while Monaco diff is open.'
                 : 'Toggle Monaco minimap';

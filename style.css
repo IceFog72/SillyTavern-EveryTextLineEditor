@@ -656,8 +656,36 @@
     overflow: hidden;
 }
 
+.etle--actions-left[hidden] {
+    display: none;
+}
+
 .etle--actions-right {
     margin-left: auto;
+}
+
+.etle--main {
+    container: etle-main / inline-size;
+}
+
+/* Narrow editor: keep the title and main actions on row one, metadata actions on row two. */
+@container etle-main (max-width: 62rem) {
+    .etle--header {
+        flex-wrap: wrap;
+        height: auto;
+        row-gap: 0.4rem;
+    }
+
+    .etle--actions-left {
+        order: 3;
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        overflow: visible;
+    }
+
+    .etle--actions-left:empty {
+        display: none;
+    }
 }
 
 .etle--toggle {
@@ -971,6 +999,13 @@
     color: var(--SmartThemeEmColor);
 }
 
+.etle--initialCommitBtn {
+    width: fit-content;
+    max-width: 100%;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
 .etle--sourceDialog {
     width: min(68rem, calc(100vw - 2rem));
     height: min(42rem, calc(100dvh - 2rem));
@@ -979,6 +1014,8 @@
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     background: var(--SmartThemeBlurTintColor);
+    /* The theme tint is translucent and blur may be 0; use the tint's colour at full opacity. */
+    background: rgb(from var(--SmartThemeBlurTintColor) r g b / 1);
     color: var(--SmartThemeBodyColor);
 }
 
@@ -1414,8 +1451,22 @@
 
 .etle--settingsButtonRow {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
-    gap: 0.3rem;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.35rem;
+}
+
+.etle--settingsButtonRow > .etle--textButton {
+    width: 100%;
+    margin: 0;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    padding: 0.35rem 0.55rem;
+    text-align: start;
+    line-height: 1.2;
+}
+
+.etle--settingsButtonRow > .etle--textButton.etle--activeButton {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
 }
 
 .etle--settingsGrid {
