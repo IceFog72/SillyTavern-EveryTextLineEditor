@@ -13,6 +13,7 @@ export declare class HistoryStore {
         sources: HistorySource[];
     }>;
     clearAll(): Promise<void>;
+    close(): void;
     hashContent(content: string): Promise<string>;
     private getAllFromStore;
     private getSourceKey;

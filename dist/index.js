@@ -24,7 +24,9 @@ const cleanLocalData = async () => {
     destroy();
     Object.values(STORAGE).forEach(key => localStorage.removeItem(key));
     clearSettings();
-    await new HistoryStore().clearAll();
+    const store = new HistoryStore();
+    await store.clearAll();
+    store.close();
 };
 export function onActivate() {
     init();
