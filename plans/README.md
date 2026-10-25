@@ -13,13 +13,18 @@ SillyTavern check list. `npm run check` (`tsc --noEmit`) is the only automated g
 
 | Plan | Title | Priority | Effort | Depends on | Status |
 |------|-------|----------|--------|------------|--------|
-| 001 | [Keep settings types stable in the localStorage migration; snapshots out of settings.json](001-settings-migration-types.md) | P1 | S | — | TODO |
-| 002 | [Make onDelete/onClean wipe IndexedDB history](002-clean-wipes-history.md) | P1 | S | — | TODO |
-| 003 | [Stop leaking document listeners and stacking scroll-sync listeners](003-listener-lifecycle.md) | P1 | S | — | TODO |
-| 004 | [Never discard an unsaved draft without asking](004-preserve-dirty-draft.md) | P1 | M | — | TODO |
-| 005 | [Stop background polling and per-keystroke diff/history work](005-idle-and-typing-cost.md) | P2 | S | 004 (recommended) | TODO |
-| 006 | [Upgrade Monaco 0.57.0 + typo-js 1.4.0; clean vendor copies](006-upgrade-monaco-typo.md) | P2 | S | — | TODO |
-| 007 | [Migrate prism-code-editor 2.4.1 → 5.4.0; remove dead dist output](007-upgrade-prism-5.md) | P2 | M | 003, 006 | TODO |
+| 001 | [Keep settings types stable in the localStorage migration; snapshots out of settings.json](001-settings-migration-types.md) | P1 | S | — | DONE |
+| 002 | [Make onDelete/onClean wipe IndexedDB history](002-clean-wipes-history.md) | P1 | S | — | DONE |
+| 003 | [Stop leaking document listeners and stacking scroll-sync listeners](003-listener-lifecycle.md) | P1 | S | — | DONE |
+| 004 | [Never discard an unsaved draft without asking](004-preserve-dirty-draft.md) | P1 | M | — | DONE |
+| 005 | [Stop background polling and per-keystroke diff/history work](005-idle-and-typing-cost.md) | P2 | S | 004 (recommended) | DONE |
+| 006 | [Upgrade Monaco 0.57.0 + typo-js 1.4.0; clean vendor copies](006-upgrade-monaco-typo.md) | P2 | S | — | DONE |
+| 007 | [Migrate prism-code-editor 2.4.1 → 5.4.0; remove dead dist output](007-upgrade-prism-5.md) | P2 | M | 003, 006 | DONE |
+
+All seven were executed on branch `improve/editor-upgrades-fixes` (2026-10-25), one commit each, plus a UI polish commit.
+Deviations from the written plans:
+- 004: identity uses a new `TextSource.identity` (card avatar), not `label`/`displayGroup`. Current Card sources now refuse to follow a different character (`refresh()` throws), and a refresh that cannot rebind keeps the draft on the original source with a warning toast instead of prompting from a background watcher.
+- 007: another installed extension (SillyTavern-CssSnippets) loads unscoped prism-code-editor 2.x CSS, which hid 5.x line numbers. `style.css` re-asserts the 5.x line layout under `#etle--panel`. Diff tint now stays off the gutter.
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJECTED (with one-line rationale)
 
