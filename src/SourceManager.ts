@@ -90,15 +90,17 @@ const replaceObjectContents = (target: Record<string, any>, source: Record<strin
 
 const normalizePromptContent = (value: unknown): string => String(value ?? '').trim().replace(/\r\n/g, '\n');
 
-const getPromptInspectorCurrent = () => getSetting<string>(STORAGE.promptInspectorCurrent, '');
-const getPromptInspectorPrevious = () => getSetting<string>(STORAGE.promptInspectorPrevious, '');
+// Snapshots hold whole prompts; keep them in browser storage, not settings.json.
+const getPromptInspectorCurrent = () => localStorage.getItem(STORAGE.promptInspectorCurrent) ?? '';
+const getPromptInspectorPrevious = () => localStorage.getItem(STORAGE.promptInspectorPrevious) ?? '';
+const getPromptInspectorUpdatedAt = () => localStorage.getItem(STORAGE.promptInspectorUpdatedAt) ?? '';
 const isPromptInspectorEnabled = () => getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
 
 export const setPromptInspectorSnapshot = (value: string) => {
     const current = getPromptInspectorCurrent();
-    if (current && current !== value) setSetting(STORAGE.promptInspectorPrevious, current);
-    setSetting(STORAGE.promptInspectorCurrent, value);
-    setSetting(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
+    if (current && current !== value) localStorage.setItem(STORAGE.promptInspectorPrevious, current);
+    localStorage.setItem(STORAGE.promptInspectorCurrent, value);
+    localStorage.setItem(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
 };
 
 export const getPromptInspectorSourceId = () => 'prompt-inspector:last-result';
@@ -1159,8 +1161,8 @@ export const getSources = async (): Promise<TextSource[]> => {
         toggle: () => {
             setSetting(STORAGE.promptInspectorEnabled, !isPromptInspectorEnabled());
         },
-        meta: getSetting<string>(STORAGE.promptInspectorUpdatedAt, '')
-            ? `Last inspected prompt: ${new Date(Number(getSetting<string>(STORAGE.promptInspectorUpdatedAt, ''))).toLocaleString()}`
+        meta: getPromptInspectorUpdatedAt()
+            ? `Last inspected prompt: ${new Date(Number(getPromptInspectorUpdatedAt())).toLocaleString()}`
             : 'Captures next generation prompt when enabled.',
     });
 

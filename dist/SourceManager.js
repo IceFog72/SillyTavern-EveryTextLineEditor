@@ -75,15 +75,17 @@ const replaceObjectContents = (target, source) => {
     Object.assign(target, source);
 };
 const normalizePromptContent = (value) => String(value ?? '').trim().replace(/\r\n/g, '\n');
-const getPromptInspectorCurrent = () => getSetting(STORAGE.promptInspectorCurrent, '');
-const getPromptInspectorPrevious = () => getSetting(STORAGE.promptInspectorPrevious, '');
+// Snapshots hold whole prompts; keep them in browser storage, not settings.json.
+const getPromptInspectorCurrent = () => localStorage.getItem(STORAGE.promptInspectorCurrent) ?? '';
+const getPromptInspectorPrevious = () => localStorage.getItem(STORAGE.promptInspectorPrevious) ?? '';
+const getPromptInspectorUpdatedAt = () => localStorage.getItem(STORAGE.promptInspectorUpdatedAt) ?? '';
 const isPromptInspectorEnabled = () => getSetting(STORAGE.promptInspectorEnabled, false);
 export const setPromptInspectorSnapshot = (value) => {
     const current = getPromptInspectorCurrent();
     if (current && current !== value)
-        setSetting(STORAGE.promptInspectorPrevious, current);
-    setSetting(STORAGE.promptInspectorCurrent, value);
-    setSetting(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
+        localStorage.setItem(STORAGE.promptInspectorPrevious, current);
+    localStorage.setItem(STORAGE.promptInspectorCurrent, value);
+    localStorage.setItem(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
 };
 export const getPromptInspectorSourceId = () => 'prompt-inspector:last-result';
 export const getPromptInspectorPreviousValue = () => getPromptInspectorPrevious();
@@ -1039,8 +1041,8 @@ export const getSources = async () => {
         toggle: () => {
             setSetting(STORAGE.promptInspectorEnabled, !isPromptInspectorEnabled());
         },
-        meta: getSetting(STORAGE.promptInspectorUpdatedAt, '')
-            ? `Last inspected prompt: ${new Date(Number(getSetting(STORAGE.promptInspectorUpdatedAt, ''))).toLocaleString()}`
+        meta: getPromptInspectorUpdatedAt()
+            ? `Last inspected prompt: ${new Date(Number(getPromptInspectorUpdatedAt())).toLocaleString()}`
             : 'Captures next generation prompt when enabled.',
     });
     if (typeof power_user?.persona_description === 'string') {
