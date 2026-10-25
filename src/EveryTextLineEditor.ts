@@ -6,17 +6,18 @@ import { Popup, POPUP_RESULT } from '../../../../popup.js';
 import { download } from '../../../../utils.js';
 // @ts-ignore
 import { eventSource, event_types, stopGeneration } from '../../../../../script.js';
-import { createEditor, languageMap, Prism } from './vendor/prism-code-editor/index.js';
-import { defaultCommands } from './vendor/prism-code-editor/extensions/commands.js';
+import { createEditor, languageMap } from './vendor/prism-code-editor/index.js';
+import { languages } from './vendor/prism-code-editor/prism/index.js';
+import { defaultCommands } from './vendor/prism-code-editor/extensions/commands/index.js';
 import { indentGuides } from './vendor/prism-code-editor/extensions/guides.js';
 import { matchBrackets } from './vendor/prism-code-editor/extensions/matchBrackets/index.js';
 import { highlightBracketPairs } from './vendor/prism-code-editor/extensions/matchBrackets/highlight.js';
 import { searchWidget } from './vendor/prism-code-editor/extensions/search/index.js';
 import { getSpellchecker, MonacoSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es.js';
-import './vendor/prism-code-editor/grammars/yaml.js';
-import './vendor/prism-code-editor/grammars/markdown.js';
-import './vendor/prism-code-editor/grammars/json.js';
-import './vendor/prism-code-editor/grammars/css.js';
+import './vendor/prism-code-editor/prism/languages/yaml.js';
+import './vendor/prism-code-editor/prism/languages/markdown.js';
+import './vendor/prism-code-editor/prism/languages/json.js';
+import './vendor/prism-code-editor/prism/languages/css.js';
 
 import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
 import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
@@ -25,41 +26,34 @@ import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
 import { renderSettingsPanel } from './SettingsPanel.js';
 import { isLorebookGroup, openSourceControlDialog, renderSourceTree } from './SourcePanel.js';
+import { getSetting, setSetting } from './settings.js';
 
 // Disable tag highlighting to prevent misalignment issues
-if (Prism.languages.markdown) {
-    delete (Prism.languages.markdown as any).tag;
+if (languages.markdown) {
+    delete (languages.markdown as any).tag;
 }
 
 const getIndentMode = (): IndentMode => {
-    const stored = localStorage.getItem(STORAGE.indentMode);
+    const stored = getSetting<string>(STORAGE.indentMode, '');
     return INDENT_MODES.find(mode => mode.id === stored) ?? INDENT_MODES[0];
 };
 
 const getEditorEngine = (): EditorEngine => {
-    const stored = localStorage.getItem(STORAGE.editorEngine);
+    const stored = getSetting<string>(STORAGE.editorEngine, '');
     return EDITOR_ENGINES.find(engine => engine.id === stored) ?? EDITOR_ENGINES[0];
 };
 
-const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
-const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
-const isFullJsonHistoryIgnored = () => JSON.parse(localStorage.getItem(STORAGE.ignoreFullJsonHistory) || 'true');
+const isSpellCheckEnabled = () => getSetting<boolean>(STORAGE.spellCheck, false);
+const isMonacoMinimapEnabled = () => getSetting<boolean>(STORAGE.monacoMinimap, false);
+const isFullJsonHistoryIgnored = () => getSetting<boolean>(STORAGE.ignoreFullJsonHistory, true);
 const getStoredSourceLanguages = (): Record<string, string> => {
-    try {
-        const stored = JSON.parse(localStorage.getItem(STORAGE.sourceLanguages) || '{}');
-        return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
-    } catch {
-        return {};
-    }
+    const stored = getSetting<Record<string, string>>(STORAGE.sourceLanguages, {});
+    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
 };
 
 const getTrackedSourceGroups = (): string[] => {
-    try {
-        const value = JSON.parse(localStorage.getItem(STORAGE.trackedSources) || '[]');
-        return Array.isArray(value) ? value.filter((group): group is string => typeof group === 'string') : [];
-    } catch {
-        return [];
-    }
+    const value = getSetting<string[]>(STORAGE.trackedSources, []);
+    return Array.isArray(value) ? value.filter((group): group is string => typeof group === 'string') : [];
 };
 
 const supportsYaml = (): boolean => {
@@ -90,6 +84,10 @@ const yamlToJson = (yaml: string): string => {
         return yaml;
     }
 };
+
+// Same id is not enough: Current Card ids are shared by every character.
+const isSameSourceIdentity = (a: TextSource, b: TextSource) =>
+    a.id === b.id && a.group === b.group && (a.identity ?? '') === (b.identity ?? '');
 
 declare global {
     interface Window {
@@ -222,6 +220,10 @@ export class EveryTextLineEditor {
     _popupPreviousParent: Element | null;
     _popupEscHandler: ((e: KeyboardEvent) => void) | null;
     syncWandToggleButton?: () => void;
+    panelResizeObserver: ResizeObserver | null;
+    lifecycle: AbortController;
+    diffScrollBindings: AbortController | null;
+    detachedDraftSource: TextSource | null;
 
     constructor() {
         this.sources = [];
@@ -252,6 +254,9 @@ export class EveryTextLineEditor {
         this.selectedSidebarTab = 'sources';
         this.selectedHistoryGroup = '';
         this.historyStore = new HistoryStore();
+        this.lifecycle = new AbortController();
+        this.diffScrollBindings = null;
+        this.detachedDraftSource = null;
         this.sourceLanguages = getStoredSourceLanguages();
         this.suppressEditorChange = false;
         this.trackedSourceGroups = new Set(getTrackedSourceGroups());
@@ -261,7 +266,8 @@ export class EveryTextLineEditor {
         this.sourceEventHandlers = [];
         this._popupPreviousParent = null;
         this._popupEscHandler = null;
-        const storedSync = localStorage.getItem(STORAGE.scrollSync);
+        this.panelResizeObserver = null;
+        const storedSync = getSetting<string>(STORAGE.scrollSync, '');
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
     }
 
@@ -275,6 +281,8 @@ export class EveryTextLineEditor {
     }
 
     destroy() {
+        this.lifecycle.abort();
+        this.diffScrollBindings?.abort();
         this.stopSourceWatcher();
         this.stopSourceEventListeners();
         if (this.runtimeSourceRefreshTimer !== null) {
@@ -283,8 +291,12 @@ export class EveryTextLineEditor {
         }
         this.closeMonacoDiff({ syncValue: true });
         this.disposeMonacoSpellcheckers();
+        this.panelResizeObserver?.disconnect();
+        this.panelResizeObserver = null;
         this.editor?.dispose?.();
         this.oldEditor?.dispose?.();
+        if (this.dom.root?.classList.contains('etle--popup')) this.toggleFullscreen();
+        this.dirty = false;
         this.dom.drawer?.remove();
         this.dom.wandButton?.remove();
         this.sources = [];
@@ -336,7 +348,7 @@ export class EveryTextLineEditor {
             toggle.addEventListener('click', () => this.toggleDrawerClasses());
         }
 
-        document.addEventListener('click', (event) => this.handleDocumentClick(event), { capture: true });
+        document.addEventListener('click', (event) => this.handleDocumentClick(event), { capture: true, signal: this.lifecycle.signal });
     }
 
     handleDrawerToggle(event) {
@@ -364,8 +376,8 @@ export class EveryTextLineEditor {
         this.dom.root = root;
         root.id = 'etle--panel';
         root.classList.add('drawer-content', 'closedDrawer');
-        root.style.setProperty('--etle-sidebar-width', localStorage.getItem(STORAGE.panelWidth) || '320px');
-        root.classList.toggle('etle--sidebarCollapsed', localStorage.getItem(STORAGE.sidebarCollapsed) === 'true');
+        root.style.setProperty('--etle-sidebar-width', getSetting<string>(STORAGE.panelWidth, '320px'));
+        root.classList.toggle('etle--sidebarCollapsed', getSetting<boolean>(STORAGE.sidebarCollapsed, false));
 
         const shell = document.createElement('div');
         shell.classList.add('etle--shell');
@@ -434,7 +446,7 @@ export class EveryTextLineEditor {
         const addSource = this.makeTextButton('Control', 'fa-filter', () => this.openSourceControlDialog());
         this.dom.addSource = addSource;
 
-        const inspectEnabled = localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+        const inspectEnabled = getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
         const inspectBtn = this.makeTextButton(
             inspectEnabled ? 'Stop Inspecting' : 'Inspect Prompts',
             inspectEnabled ? 'fa-bug-slash' : 'fa-bug',
@@ -528,7 +540,9 @@ export class EveryTextLineEditor {
 
         this.dom.diff = this.makeTextButton('Diff', 'fa-code-branch', () => this.toggleDiff());
         this.dom.revert = this.makeTextButton('', 'fa-undo', () => this.revert());
+        this.dom.revert.title = 'Revert to saved text';
         this.dom.apply = this.makeTextButton('', 'fa-check', () => this.apply());
+        this.dom.apply.title = 'Apply and save (Ctrl+S)';
 
         actionsRight.append(this.dom.diff, this.dom.revert, this.dom.apply, this.makeIconButton('fa-times', 'Close editor', () => this.close().catch((error) => console.error(`[${NAME}] Failed to close editor`, error))));
 
@@ -622,16 +636,21 @@ export class EveryTextLineEditor {
                     await this.refreshHistory();
                 },
                 onSelectCategory: async (groupName) => {
+                    const previousGroup = this.selectedHistoryGroup;
                     this.selectedHistoryGroup = groupName;
                     const firstSource = this.sources.find(s => s.group === groupName && !s.placeholder);
                     if (firstSource && (!this.selectedSource || this.selectedSource.group !== groupName)) {
-                        await this.selectSource(firstSource.id, { force: true });
+                        await this.selectSource(firstSource.id);
+                        if (this.selectedSource?.group !== groupName) {
+                            this.selectedHistoryGroup = previousGroup;
+                            await this.refreshHistory();
+                        }
                     } else {
                         await this.refreshHistory();
                     }
                 },
                 onSelectSource: async (sourceId) => {
-                    await this.selectSource(sourceId, { force: true });
+                    await this.selectSource(sourceId);
                 },
                 onCompareChanged: async (change) => {
                     await this.compareChangedSource(change);
@@ -642,6 +661,34 @@ export class EveryTextLineEditor {
 
         this.updateDirty(false);
         this.updateStatusBar();
+
+        // Auto-collapse sidebar when panel is narrower than 800px
+        this.panelResizeObserver = new ResizeObserver((entries) => {
+            if (!getSetting<boolean>(STORAGE.autoCollapseSidebar, true)) return;
+            const entry = entries[0];
+            if (!entry) return;
+            const width = entry.contentRect.width;
+            const isCollapsed = this.dom.root?.classList.contains('etle--sidebarCollapsed');
+            if (width < 800 && !isCollapsed) {
+                this.dom.root?.classList.add('etle--sidebarCollapsed');
+                requestAnimationFrame(() => {
+                    this.editor?.update?.();
+                    this.oldEditor?.update?.();
+                    this.updateMasterScrollbarHeight();
+                });
+            } else if (width >= 800 && isCollapsed) {
+                // Only auto-restore if the user did not manually collapse it
+                if (!getSetting<boolean>(STORAGE.sidebarCollapsed, false)) {
+                    this.dom.root?.classList.remove('etle--sidebarCollapsed');
+                    requestAnimationFrame(() => {
+                        this.editor?.update?.();
+                        this.oldEditor?.update?.();
+                        this.updateMasterScrollbarHeight();
+                    });
+                }
+            }
+        });
+        this.panelResizeObserver.observe(root);
 
         return root;
     }
@@ -736,7 +783,7 @@ export class EveryTextLineEditor {
 
     setSidebarCollapsed(collapsed: boolean) {
         this.dom.root?.classList.toggle('etle--sidebarCollapsed', collapsed);
-        localStorage.setItem(STORAGE.sidebarCollapsed, JSON.stringify(collapsed));
+        setSetting(STORAGE.sidebarCollapsed, collapsed);
         requestAnimationFrame(() => {
             this.editor?.update?.();
             this.oldEditor?.update?.();
@@ -822,8 +869,8 @@ export class EveryTextLineEditor {
     }
 
     togglePromptInspector() {
-        const enabled = localStorage.getItem(STORAGE.promptInspectorEnabled) !== 'true';
-        localStorage.setItem(STORAGE.promptInspectorEnabled, String(enabled));
+        const enabled = !getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
+        setSetting(STORAGE.promptInspectorEnabled, enabled);
         const btn = this.dom.inspectPromptsBtn;
         if (btn) {
             const icon = btn.querySelector('span.fa-solid');
@@ -843,7 +890,7 @@ export class EveryTextLineEditor {
     addWandToggleButton() {
         this.dom.wandButton?.remove();
 
-        const getEnabledState = () => localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+        const getEnabledState = () => getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
         const enabledText = 'Stop Inspecting';
         const disabledText = 'Inspect Prompts';
         const enabledIcon = 'fa-solid fa-bug-slash';
@@ -893,7 +940,7 @@ export class EveryTextLineEditor {
 
         const toggle = () => {
             const newState = !getEnabledState();
-            localStorage.setItem(STORAGE.promptInspectorEnabled, String(newState));
+            setSetting(STORAGE.promptInspectorEnabled, newState);
             globalThis.toastr?.info?.(`Prompt inspection is now ${newState ? 'enabled' : 'disabled'}`);
             
             icon.className = getIcon();
@@ -1027,7 +1074,7 @@ export class EveryTextLineEditor {
         wrap.type = 'button';
         wrap.classList.add('etle--statusButton');
         wrap.title = 'Toggle word wrap';
-        wrap.addEventListener('click', () => this.setWordWrap(!JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true')));
+        wrap.addEventListener('click', () => this.setWordWrap(!getSetting<boolean>(STORAGE.wordWrap, true)));
         right.append(wrap);
 
         const spell = document.createElement('button');
@@ -1087,17 +1134,17 @@ export class EveryTextLineEditor {
         const previousEngine = this.editorEngine;
         this.closeMonacoDiff({ syncValue: true });
         const currentValue = this.editor?.value ?? '';
-        const currentScrollTop = this.editor?.scrollContainer?.scrollTop ?? 0;
+        const currentScrollTop = this.editor?.container?.scrollTop ?? 0;
         const readOnly = !!this.selectedSource?.readonly;
 
         try {
             const nextEditor = await this.createEditorForEngine(this.dom.editorHost, engine, currentValue, readOnly);
             this.editor?.dispose?.();
-            this.editor?.scrollContainer?.remove();
+            this.editor?.container?.remove();
             this.editor = nextEditor;
-            this.editor.scrollContainer.scrollTop = currentScrollTop;
+            this.editor.container.scrollTop = currentScrollTop;
             this.editorEngine = engine;
-            localStorage.setItem(STORAGE.editorEngine, engine.id);
+            setSetting(STORAGE.editorEngine, engine.id);
             if (this.dom.editorEngine) this.dom.editorEngine.value = engine.id;
             this.bindDiffScrollSync();
             this.updateDirty(this.isCurrentEditorDirty());
@@ -1127,7 +1174,7 @@ export class EveryTextLineEditor {
         }).catch((error) => {
             console.warn(`[${NAME}] Failed to initialize ${this.editorEngine.label}; falling back to Prism`, error);
             this.editorEngine = EDITOR_ENGINES[0];
-            localStorage.setItem(STORAGE.editorEngine, this.editorEngine.id);
+            setSetting(STORAGE.editorEngine, this.editorEngine.id);
             this.editor = this.createPrismCodeEditor(host, '', false);
             this.bindDiffScrollSync();
             this.updateStatusBar();
@@ -1150,7 +1197,7 @@ export class EveryTextLineEditor {
                 readOnly,
                 insertSpaces: this.indentMode.insertSpaces,
                 tabSize: this.indentMode.tabSize,
-                wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true'),
+                wordWrap: getSetting<boolean>(STORAGE.wordWrap, true),
                 onUpdate: (value) => {
                     if (this.suppressEditorChange) return;
                     if (!this.selectedSource) return;
@@ -1183,10 +1230,12 @@ export class EveryTextLineEditor {
         editor.textarea.addEventListener('click', syncCaret);
         editor.textarea.addEventListener('select', syncCaret);
         editor.textarea.addEventListener('input', syncCaret);
+        const documentListeners = new AbortController();
         document.addEventListener('selectionchange', () => {
             if (document.activeElement === editor.textarea) syncCaret();
-        });
+        }, { signal: documentListeners.signal });
 
+        (editor as PrismEditorLike).dispose = () => documentListeners.abort();
         return editor;
     }
 
@@ -1210,7 +1259,7 @@ export class EveryTextLineEditor {
             minimap: { enabled: isMonacoMinimapEnabled() && !(this.diffOpen && this.dom.root?.classList.contains('etle--monacoDiffMode')) },
             lineNumbers: 'on',
             scrollBeyondLastLine: false,
-            wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
+            wordWrap: getSetting<boolean>(STORAGE.wordWrap, true) ? 'on' : 'off',
             theme: 'vs-dark',
         });
         this.monacoEditor = monacoEditor;
@@ -1246,7 +1295,7 @@ export class EveryTextLineEditor {
                 return model.getValue();
             },
             textarea: focusProxy,
-            scrollContainer: container,
+            container,
             wrapper: container,
             setOptions: (options: Record<string, any>) => {
                 if (typeof options.value === 'string' && options.value !== model.getValue()) {
@@ -1325,7 +1374,7 @@ export class EveryTextLineEditor {
                 readOnly: true,
                 insertSpaces: this.indentMode.insertSpaces,
                 tabSize: this.indentMode.tabSize,
-                wordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true'),
+                wordWrap: getSetting<boolean>(STORAGE.wordWrap, true),
             },
             searchWidget(),
             highlightBracketPairs(),
@@ -1337,13 +1386,16 @@ export class EveryTextLineEditor {
 
     bindDiffScrollSync() {
         if (!this.editor || !this.oldEditor || !this.dom.masterScrollbar) return;
+        this.diffScrollBindings?.abort();
+        this.diffScrollBindings = new AbortController();
+        const { signal } = this.diffScrollBindings;
 
         const syncFromMaster = () => {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off' || this.isSyncingScroll) return;
             this.isSyncingScroll = true;
             const top = this.dom.masterScrollbar.scrollTop;
-            this.editor.scrollContainer.scrollTop = top;
-            this.oldEditor.scrollContainer.scrollTop = top;
+            this.editor.container.scrollTop = top;
+            this.oldEditor.container.scrollTop = top;
             setTimeout(() => this.isSyncingScroll = false, 0);
         };
 
@@ -1355,24 +1407,24 @@ export class EveryTextLineEditor {
             if (this.dom.masterScrollbar.scrollTop === before) this.scrollDiffPanesBy(event.deltaY);
         };
 
-        this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true });
-        this.editor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
-        this.oldEditor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
+        this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true, signal });
+        this.editor.container.addEventListener('wheel', handleWheel, { passive: false, signal });
+        this.oldEditor.container.addEventListener('wheel', handleWheel, { passive: false, signal });
 
         const syncFromEditor = (from, to) => {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off' || this.isSyncingScroll) return;
             this.applyScrollSync(from, to);
             this.dom.masterScrollbar.scrollTop = from.scrollTop;
         };
-        this.editor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true });
-        this.oldEditor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true });
+        this.editor.container.addEventListener('scroll', () => syncFromEditor(this.editor.container, this.oldEditor.container), { passive: true, signal });
+        this.oldEditor.container.addEventListener('scroll', () => syncFromEditor(this.oldEditor.container, this.editor.container), { passive: true, signal });
     }
 
     scrollDiffPanesBy(deltaY: number) {
         if (!this.editor || !this.oldEditor || this.isSyncingScroll) return;
         this.isSyncingScroll = true;
-        this.editor.scrollContainer.scrollTop += deltaY;
-        this.oldEditor.scrollContainer.scrollTop += deltaY;
+        this.editor.container.scrollTop += deltaY;
+        this.oldEditor.container.scrollTop += deltaY;
         setTimeout(() => this.isSyncingScroll = false, 0);
     }
 
@@ -1406,9 +1458,9 @@ export class EveryTextLineEditor {
 
     syncDiffScroll() {
         if (!this.editor || !this.oldEditor || !this.diffOpen) return;
-        this.applyScrollSync(this.editor.scrollContainer, this.oldEditor.scrollContainer);
+        this.applyScrollSync(this.editor.container, this.oldEditor.container);
         if (this.dom.masterScrollbar) {
-            this.dom.masterScrollbar.scrollTop = this.editor.scrollContainer.scrollTop;
+            this.dom.masterScrollbar.scrollTop = this.editor.container.scrollTop;
         }
     }
 
@@ -1422,15 +1474,23 @@ export class EveryTextLineEditor {
     }
 
     async refreshSources(keepSelection = false) {
-        const previousId = keepSelection ? this.selectedSource?.id : localStorage.getItem(STORAGE.selectedSource);
+        const previousId = keepSelection ? this.selectedSource?.id : getSetting<string>(STORAGE.selectedSource, '');
         this.sources = await getSources();
         this.pruneTrackedSources();
         this.renderTree();
         this.updateStatusBar();
 
         const visibleSources = this.getTrackedSources();
-        if (previousId && visibleSources.some(source => source.id === previousId)) {
-            await this.selectSource(previousId, { force: true });
+        const nextSource = previousId ? visibleSources.find(source => source.id === previousId) : undefined;
+        const current = this.selectedSource;
+        if (this.dirty && current) {
+            // A refresh never drops an unsaved draft.
+            if (nextSource && isSameSourceIdentity(current, nextSource)) this.rebindSelectedSource(nextSource);
+            else this.keepDetachedDraft(current);
+            return;
+        }
+        if (nextSource) {
+            await this.selectSource(nextSource.id, { force: true });
         } else if (visibleSources.length && (!this.selectedSource || !visibleSources.some(source => source.id === this.selectedSource?.id))) {
             await this.selectSource(visibleSources[0].id, { force: true });
         } else if (!visibleSources.length) {
@@ -1477,14 +1537,14 @@ export class EveryTextLineEditor {
     }
 
     async inspectGeneratedPrompt(data: Record<string, any> | undefined, key: 'chat' | 'prompt') {
-        if (!data || data.dryRun || localStorage.getItem(STORAGE.promptInspectorEnabled) !== 'true') return;
+        if (!data || data.dryRun || !getSetting<boolean>(STORAGE.promptInspectorEnabled, false)) return;
         const prompt = data[key];
         if (!prompt) return;
         if (typeof prompt === 'string' && !prompt.trim()) return;
         if (Array.isArray(prompt) && prompt.length === 0) return;
 
         const inspectFormat = (key === 'chat' && supportsYaml())
-            ? (localStorage.getItem('promptInspectorFormat') || 'yaml')
+            ? getSetting<string>('promptInspectorFormat', 'yaml')
             : 'json';
         const initialJsonValue = typeof prompt === 'string' ? prompt : JSON.stringify(prompt ?? '', null, 4);
         const value = inspectFormat === 'yaml' ? jsonToYaml(initialJsonValue) : initialJsonValue;
@@ -1492,7 +1552,7 @@ export class EveryTextLineEditor {
         setPromptInspectorSnapshot(value);
         await this.open();
         const sourceId = getPromptInspectorSourceId();
-        await this.selectSource(sourceId, { force: true });
+        await this.selectSource(sourceId, { force: this.selectedSource?.id === sourceId });
         if (this.selectedSource?.id !== sourceId) return;
 
         let previousValue = getPromptInspectorPreviousValue();
@@ -1553,7 +1613,7 @@ export class EveryTextLineEditor {
             return;
         }
 
-        const currentFormat = localStorage.getItem('promptInspectorFormat') || 'yaml';
+        const currentFormat = getSetting<string>('promptInspectorFormat', 'yaml');
         const finalJsonOutput = (key === 'chat' && currentFormat === 'yaml') ? yamlToJson(output) : output;
 
         try {
@@ -1601,7 +1661,7 @@ export class EveryTextLineEditor {
     }
 
     async selectInitialSource() {
-        const storedId = localStorage.getItem(STORAGE.selectedSource);
+        const storedId = getSetting<string>(STORAGE.selectedSource, '');
         const visibleSources = this.getTrackedSources();
         if (storedId && visibleSources.some(source => source.id === storedId)) {
             await this.selectSource(storedId, { force: true });
@@ -1619,7 +1679,7 @@ export class EveryTextLineEditor {
     }
 
     persistTrackedSources() {
-        localStorage.setItem(STORAGE.trackedSources, JSON.stringify([...this.trackedSourceGroups]));
+        setSetting(STORAGE.trackedSources, [...this.trackedSourceGroups]);
     }
 
     pruneTrackedSources() {
@@ -1644,7 +1704,7 @@ export class EveryTextLineEditor {
         if (this.selectedSource && visibleSources.some(source => source.id === this.selectedSource?.id)) return;
         const firstSelectable = visibleSources.find(source => source.selectable !== false);
         if (firstSelectable) {
-            await this.selectSource(firstSelectable.id, { force: true });
+            await this.selectSource(firstSelectable.id);
         } else {
             this.clearSelectedSource('No source categories selected', 'Click Control to choose which categories stay in this list.');
         }
@@ -1655,7 +1715,7 @@ export class EveryTextLineEditor {
         this.selectedSourceBaseline = '';
         this.selectedSourceChanged = false;
         this.historyCommit = undefined;
-        localStorage.removeItem(STORAGE.selectedSource);
+        setSetting(STORAGE.selectedSource, '');
         this.setEditorValue('');
         this.updateDirty(false);
         if (this.dom.currentTitle) this.dom.currentTitle.textContent = title;
@@ -1689,7 +1749,7 @@ export class EveryTextLineEditor {
         const label = source.label.toLowerCase();
         if (id.includes('custom_css') || label.includes('css')) return cssLanguage;
         if (source.group.includes('Prompt Inspector')) {
-            const format = localStorage.getItem('promptInspectorFormat') || 'yaml';
+            const format = getSetting<string>('promptInspectorFormat', 'yaml');
             return format === 'yaml' ? yamlLanguage : jsonLanguage;
         }
         if (source.group.includes('Connection Profiles')) return jsonLanguage;
@@ -1707,7 +1767,7 @@ export class EveryTextLineEditor {
         } else {
             this.sourceLanguages[source.id] = lang.id;
         }
-        localStorage.setItem(STORAGE.sourceLanguages, JSON.stringify(this.sourceLanguages));
+        setSetting(STORAGE.sourceLanguages, this.sourceLanguages);
     }
 
     async toggleSource(source) {
@@ -1720,6 +1780,27 @@ export class EveryTextLineEditor {
             console.error(`[${NAME}] Failed to toggle source`, error);
             globalThis.toastr?.error?.('Failed to toggle prompt. See console for details.');
         }
+    }
+
+    // Point at the refreshed TextSource object without touching the editor buffer.
+    rebindSelectedSource(source: TextSource) {
+        const baseline = source.read();
+        if (baseline !== this.selectedSourceBaseline) this.selectedSourceChanged = true;
+        this.selectedSource = source;
+        this.selectedSourceBaseline = baseline;
+        this.updateHeader();
+        this.updateDirty(this.isCurrentEditorDirty());
+        this.renderDiff();
+        this.renderTree();
+    }
+
+    // The selected source vanished or now points at a different object; keep editing the original.
+    keepDetachedDraft(source: TextSource) {
+        if (this.detachedDraftSource === source) return;
+        this.detachedDraftSource = source;
+        this.selectedSourceChanged = true;
+        this.updateDirty(true);
+        globalThis.toastr?.warning?.(`"${source.label}" changed outside the editor. Apply saves your draft to the original, Revert discards it.`);
     }
 
     async selectSource(id, { force = false } = {}) {
@@ -1739,16 +1820,14 @@ export class EveryTextLineEditor {
         if (!source || source.selectable === false) return;
 
         this.selectedSource = source;
+        this.detachedDraftSource = null;
         if (this.historyCommit?.sourceId !== source.id) this.historyCommit = undefined;
-        localStorage.setItem(STORAGE.selectedSource, source.id);
+        setSetting(STORAGE.selectedSource, source.id);
         this.selectedSourceBaseline = source.read();
         this.selectedSourceChanged = false;
-        this.currentLanguage = this.getLanguageForSource(source);
         this.updateHeader();
         this.editor?.setOptions({ readOnly: !!source.readonly });
-        this.editor?.setOptions({ language: this.currentLanguage.id });
-        this.oldEditor?.setOptions({ language: this.currentLanguage.id });
-        this.setMonacoDiffLanguage();
+        this.setActiveLanguage(this.getLanguageForSource(source), { updateUi: false });
         this.setEditorValue(this.selectedSourceBaseline);
         this.updateDirty(false);
         this.renderDiff();
@@ -1785,15 +1864,15 @@ export class EveryTextLineEditor {
             optYaml.textContent = 'YAML';
 
             formatSelect.append(optJson, optYaml);
-            const currentFormat = localStorage.getItem('promptInspectorFormat') || 'yaml';
+            const currentFormat = getSetting<string>('promptInspectorFormat', 'yaml');
             formatSelect.value = currentFormat;
 
             formatSelect.addEventListener('change', () => {
                 const newFormat = formatSelect!.value;
-                const oldFormat = localStorage.getItem('promptInspectorFormat') || 'yaml';
+                const oldFormat = getSetting<string>('promptInspectorFormat', 'yaml');
                 if (newFormat === oldFormat) return;
 
-                localStorage.setItem('promptInspectorFormat', newFormat);
+                setSetting('promptInspectorFormat', newFormat);
                 
                 // Get the current value from the editor
                 const currentValue = this.getCurrentEditorValue();
@@ -1807,12 +1886,7 @@ export class EveryTextLineEditor {
                 // Switch language in the editor
                 const langId = newFormat === 'yaml' ? 'yaml' : 'json';
                 const lang = LANGUAGES.find(l => l.id === langId);
-                if (lang) {
-                    this.currentLanguage = lang;
-                    this.editor?.setOptions({ language: lang.id });
-                    this.oldEditor?.setOptions({ language: lang.id });
-                    this.setMonacoDiffLanguage();
-                }
+                if (lang) this.setActiveLanguage(lang, { updateUi: false });
 
                 // Update baseline value in the new format so diffing is compared correctly
                 if (this.selectedSourceBaseline) {
@@ -1895,7 +1969,15 @@ export class EveryTextLineEditor {
     setEditorValue(value) {
         const nextValue = String(value ?? '');
         this.withSuppressedEditorChange(() => {
-            this.editor?.setOptions({ value: nextValue });
+            if (this.editor) {
+                try {
+                    this.editor.setOptions({ value: nextValue });
+                } catch (error) {
+                    console.warn(`[${NAME}] Prism highlight failed; falling back to plain text`, error);
+                    const plainText = this.setActiveLanguage(this.getPlainTextLanguage());
+                    this.editor.setOptions({ language: plainText.id, value: nextValue });
+                }
+            }
             if (this.monacoDiffModifiedModel && this.monacoDiffModifiedModel.getValue() !== nextValue) {
                 this.monacoDiffModifiedModel.setValue(nextValue);
             }
@@ -1924,6 +2006,7 @@ export class EveryTextLineEditor {
     startSourceWatcher() {
         this.stopSourceWatcher();
         this.sourceWatchTimer = window.setInterval(() => {
+            if (document.hidden || !this.dom.root?.classList.contains('openDrawer')) return;
             this.refreshSelectedSourceBaseline().catch((error) => console.warn(`[${NAME}] Failed to refresh selected source`, error));
         }, 500);
     }
@@ -1936,7 +2019,7 @@ export class EveryTextLineEditor {
 
     async refreshSelectedSourceBaseline() {
         if (!this.selectedSource || this.historyCommit?.sourceId === this.selectedSource.id) return;
-        if (this.sourceWatchInFlight) return;
+        if (this.sourceWatchInFlight || this.selectedSource === this.detachedDraftSource) return;
 
         const watchedSource = this.selectedSource;
         let liveValue: string;
@@ -1966,8 +2049,8 @@ export class EveryTextLineEditor {
         this.renderDiff();
     }
 
-    setWordWrap(enabled) {
-        localStorage.setItem(STORAGE.wordWrap, JSON.stringify(enabled));
+    setWordWrap(enabled: boolean) {
+        setSetting(STORAGE.wordWrap, enabled);
         this.editor?.setOptions({ wordWrap: enabled });
         this.oldEditor?.setOptions({ wordWrap: enabled });
         this.applyMonacoDiffWordWrapOption();
@@ -1975,10 +2058,10 @@ export class EveryTextLineEditor {
     }
 
     setSpellCheck(enabled: boolean) {
-        localStorage.setItem(STORAGE.spellCheck, JSON.stringify(enabled));
+        setSetting(STORAGE.spellCheck, enabled);
         this.applySpellCheckToTextArea(this.editor?.textarea);
         this.applySpellCheckToTextArea(this.oldEditor?.textarea);
-        this.applySpellCheckToMonaco(this.editor?.scrollContainer);
+        this.applySpellCheckToMonaco(this.editor?.container);
         this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
         this.editor?.setOptions({ spellCheck: enabled });
         if (enabled) {
@@ -1990,7 +2073,7 @@ export class EveryTextLineEditor {
     }
 
     setMonacoMinimap(enabled: boolean) {
-        localStorage.setItem(STORAGE.monacoMinimap, JSON.stringify(enabled));
+        setSetting(STORAGE.monacoMinimap, enabled);
         this.applyMonacoMinimapOption();
         this.updateStatusBar();
         requestAnimationFrame(() => {
@@ -2000,9 +2083,14 @@ export class EveryTextLineEditor {
     }
 
     setIgnoreFullJsonHistory(enabled: boolean) {
-        localStorage.setItem(STORAGE.ignoreFullJsonHistory, JSON.stringify(enabled));
+        setSetting(STORAGE.ignoreFullJsonHistory, enabled);
         this.updateStatusBar();
         if (this.selectedSidebarTab === 'history') this.refreshHistory();
+    }
+
+    setAutoCollapseSidebar(enabled: boolean) {
+        setSetting(STORAGE.autoCollapseSidebar, enabled);
+        this.updateStatusBar();
     }
 
     isSourceIgnoredForHistory(source?: TextSource | null): boolean {
@@ -2024,7 +2112,7 @@ export class EveryTextLineEditor {
     }
 
     applyMonacoDiffWordWrapOption() {
-        const wordWrap = JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off';
+        const wordWrap = getSetting<boolean>(STORAGE.wordWrap, true) ? 'on' : 'off';
         this.monacoDiffEditor?.updateOptions?.({ diffWordWrap: wordWrap });
         this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.({ wordWrap });
         this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.({ wordWrap });
@@ -2143,7 +2231,7 @@ export class EveryTextLineEditor {
 
     setIndentMode(mode: IndentMode) {
         this.indentMode = mode;
-        localStorage.setItem(STORAGE.indentMode, this.indentMode.id);
+        setSetting(STORAGE.indentMode, this.indentMode.id);
         this.editor?.setOptions({
             insertSpaces: this.indentMode.insertSpaces,
             tabSize: this.indentMode.tabSize,
@@ -2155,14 +2243,38 @@ export class EveryTextLineEditor {
         this.updateStatusBar();
     }
 
-    setLanguage(lang: Language) {
-        this.currentLanguage = lang;
-        if (this.selectedSource) this.setSourceLanguage(this.selectedSource, lang);
-        this.editor?.setOptions({ language: lang.id });
-        this.oldEditor?.setOptions({ language: lang.id });
+    getPlainTextLanguage() {
+        return LANGUAGES.find(language => language.id === 'text') ?? LANGUAGES[0];
+    }
+
+    setPrismEditorLanguage(editor: PrismEditorLike | null, lang: Language) {
+        if (!editor) return true;
+        try {
+            editor.setOptions({ language: lang.id });
+            return true;
+        } catch (error) {
+            console.warn(`[${NAME}] Prism language '${lang.id}' failed; falling back to plain text`, error);
+            editor.setOptions({ language: this.getPlainTextLanguage().id });
+            return false;
+        }
+    }
+
+    setActiveLanguage(lang: Language, { persist = true, updateUi = true } = {}) {
+        const applied = this.setPrismEditorLanguage(this.editor, lang);
+        const activeLanguage = applied ? lang : this.getPlainTextLanguage();
+        this.currentLanguage = activeLanguage;
+        if (persist && this.selectedSource) this.setSourceLanguage(this.selectedSource, activeLanguage);
+        this.setPrismEditorLanguage(this.oldEditor, this.getPlainTextLanguage());
         this.setMonacoDiffLanguage();
-        this.updateStatusBar();
-        this.renderTree();
+        if (updateUi) {
+            this.updateStatusBar();
+            this.renderTree();
+        }
+        return activeLanguage;
+    }
+
+    setLanguage(lang: Language) {
+        this.setActiveLanguage(lang);
     }
 
     toggleLanguageMenu() {
@@ -2227,7 +2339,7 @@ export class EveryTextLineEditor {
 
     setScrollSync(mode: SyncMode) {
         this.scrollSyncMode = mode;
-        localStorage.setItem(STORAGE.scrollSync, mode.id);
+        setSetting(STORAGE.scrollSync, mode.id);
         this.updateStatusBar();
         if (mode.id !== 'off') this.syncDiffScroll();
     }
@@ -2272,7 +2384,10 @@ export class EveryTextLineEditor {
         const source = this.selectedSource;
         if (!source) return;
         if (this.dom.currentGroup) this.dom.currentGroup.textContent = source.group;
-        if (this.dom.currentTitle) this.dom.currentTitle.textContent = source.label;
+        if (this.dom.currentTitle) {
+            this.dom.currentTitle.textContent = source.label;
+            this.dom.currentTitle.title = source.label;
+        }
         if (this.dom.editName) this.dom.editName.hidden = !source.metadata?.name;
 
         if (this.dom.actionsLeft) {
@@ -2434,7 +2549,7 @@ export class EveryTextLineEditor {
     }
 
     updateStatusBar() {
-        const wrapEnabled = JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true');
+        const wrapEnabled = getSetting<boolean>(STORAGE.wordWrap, true);
         const spellCheckEnabled = isSpellCheckEnabled();
         const minimapWanted = isMonacoMinimapEnabled();
         const minimapEnabled = this.isMonacoMinimapEffectivelyEnabled();
@@ -2526,13 +2641,22 @@ export class EveryTextLineEditor {
             this.dom.statusScrollSync.classList.toggle('etle--statusActive', this.scrollSyncMode.id !== 'off');
         }
         this.dom.root?.classList.toggle('etle--syncOff', this.scrollSyncMode.id === 'off');
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="wrap"]')?.classList.toggle('etle--activeButton', wrapEnabled);
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="spell"]')?.classList.toggle('etle--activeButton', spellCheckEnabled);
-        this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="ignoreFullJsonHistory"]')?.classList.toggle('etle--activeButton', isFullJsonHistoryIgnored());
+        const settingStates: Record<string, boolean> = {
+            wrap: wrapEnabled,
+            spell: spellCheckEnabled,
+            ignoreFullJsonHistory: isFullJsonHistoryIgnored(),
+            autoCollapseSidebar: getSetting<boolean>(STORAGE.autoCollapseSidebar, true),
+            minimap: minimapEnabled,
+        };
+        for (const [key, active] of Object.entries(settingStates)) {
+            const button = this.dom.settingsPanel?.querySelector<HTMLButtonElement>(`[data-setting="${key}"]`);
+            button?.classList.toggle('etle--activeButton', active);
+            button?.setAttribute('aria-pressed', String(active));
+        }
         const minimapSetting = this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="minimap"]');
-        minimapSetting?.classList.toggle('etle--activeButton', minimapEnabled);
         if (minimapSetting) {
-            minimapSetting.textContent = minimapForcedOff ? 'Monaco Minimap: Off in Diff' : 'Monaco Minimap';
+            // Update the label span only; the first child is the icon.
+            if (minimapSetting.lastElementChild) minimapSetting.lastElementChild.textContent = minimapForcedOff ? 'Minimap: off in Diff' : 'Minimap';
             minimapSetting.title = minimapForcedOff
                 ? 'Minimap is saved as on, but disabled while Monaco diff is open.'
                 : 'Toggle Monaco minimap';
@@ -2571,6 +2695,10 @@ export class EveryTextLineEditor {
         this.setEditorValue(this.selectedSourceBaseline);
         this.updateDirty(false);
         this.renderDiff();
+        if (this.detachedDraftSource) {
+            this.detachedDraftSource = null;
+            this.refreshSources(true).catch((error) => console.warn(`[${NAME}] Failed to refresh sources after revert`, error));
+        }
     }
 
     toggleDiff() {
@@ -2591,7 +2719,7 @@ export class EveryTextLineEditor {
         } else if (!this.diffOpen) {
             this.closeMonacoDiff({ syncValue: true });
             this.applyMonacoMinimapOption();
-            this.renderDiff();
+            this.clearDiffMarks();
         } else {
             this.renderDiff();
         }
@@ -2609,14 +2737,15 @@ export class EveryTextLineEditor {
             this.dom.masterScrollContent.style.height = '1px';
             return;
         }
-        const height = Math.max(this.editor.scrollContainer.scrollHeight, this.oldEditor.scrollContainer.scrollHeight);
+        const height = Math.max(this.editor.container.scrollHeight, this.oldEditor.container.scrollHeight);
         this.dom.masterScrollContent.style.height = `${height}px`;
-        this.dom.masterScrollbar.scrollTop = this.editor.scrollContainer.scrollTop;
+        this.dom.masterScrollbar.scrollTop = this.editor.container.scrollTop;
     }
 
     renderDiff() {
         if (!this.oldEditor) return;
         this.updateDiffSideLabels();
+        if (!this.diffOpen) return;
         if (this.diffOpen && this.editorEngine.id === 'monaco') {
             this.updateMonacoDiffModels();
             return;
@@ -2625,12 +2754,11 @@ export class EveryTextLineEditor {
         const unsaved = this.getCurrentEditorValue();
         const diff = getLineDiff(saved, unsaved);
         try {
-            this.oldEditor.setOptions({ value: diff.oldDisplayText });
+            this.oldEditor.setOptions({ language: 'text', value: diff.oldDisplayText });
             requestAnimationFrame(() => this.highlightDiff(diff));
         } catch (error) {
             console.warn(`[${NAME}] Prism diff render failed; falling back to unhighlighted text`, error);
             this.oldEditor.textarea.value = diff.oldDisplayText;
-            this.oldEditor.update?.();
             requestAnimationFrame(() => this.updateMasterScrollbarHeight());
         }
     }
@@ -2670,6 +2798,11 @@ export class EveryTextLineEditor {
         this.applyDiffMarks(this.oldEditor, diff.oldMarks, 'removed');
         this.applyDiffMarks(this.editor, diff.newMarks, 'added');
         this.updateMasterScrollbarHeight();
+    }
+
+    clearDiffMarks() {
+        this.applyDiffMarks(this.oldEditor, [], 'removed');
+        this.applyDiffMarks(this.editor, [], 'added');
     }
 
     applyDiffMarks(editor, marks, activeMark) {
@@ -2719,7 +2852,7 @@ export class EveryTextLineEditor {
             renderSideBySide: true,
             minimap: { enabled: isMonacoMinimapEnabled() },
             scrollBeyondLastLine: false,
-            diffWordWrap: JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true') ? 'on' : 'off',
+            diffWordWrap: getSetting<boolean>(STORAGE.wordWrap, true) ? 'on' : 'off',
         });
         this.applyMonacoMinimapOption();
         this.applyMonacoDiffWordWrapOption();
@@ -2802,6 +2935,7 @@ export class EveryTextLineEditor {
     }
 
     updateDirty(isDirty) {
+        const wasDirty = this.dirty;
         this.dirty = !!isDirty;
         this.dom.root?.classList.toggle('etle--dirty', this.dirty);
         this.dom.root?.classList.toggle('etle--sourceChanged', this.selectedSourceChanged);
@@ -2810,7 +2944,7 @@ export class EveryTextLineEditor {
         if (this.dom.apply) this.dom.apply.disabled = !this.dirty || this.selectedSource?.readonly;
         if (this.dom.revert) this.dom.revert.disabled = !this.dirty;
         this.updateStatusBar();
-        if (this.selectedSidebarTab === 'history') this.refreshHistory();
+        if (wasDirty !== this.dirty && this.selectedSidebarTab === 'history') this.refreshHistory();
     }
 
     async open() {
@@ -2847,7 +2981,7 @@ export class EveryTextLineEditor {
         const onMove = (moveEvent) => {
             const width = Math.min(560, Math.max(220, startWidth + moveEvent.clientX - startX));
             this.dom.root.style.setProperty('--etle-sidebar-width', `${width}px`);
-            localStorage.setItem(STORAGE.panelWidth, `${width}px`);
+            setSetting(STORAGE.panelWidth, `${width}px`);
         };
         const onUp = () => {
             window.removeEventListener('pointermove', onMove);

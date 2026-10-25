@@ -1,3 +1,4 @@
 /** @module search */
-export * from "./widget";
-export * from "./selection";
+export * from './widget.js';
+export * from './selection.js';
+export * from './invisibles.js';

@@ -1,4 +1,4 @@
-import { PrismEditor } from ".";
+import { PrismEditor } from './index.js';
 /**
  * Moves to tooltip to align with the cursor and shows it.
  * @param preferPlacingAboveCursor Whether the preferred position is above the cursor or not.
@@ -7,8 +7,17 @@ export type ShowTooltip = (preferPlacingAboveCursor?: boolean) => void;
 /** Function removing the tooltip from the DOM. */
 export type HideTooltip = () => void;
 /**
- * Utility making it easy to add tooltips to an editor. Before you can show the tooltip,
- * a {@link cursorPosition} extension must be added to the editor.
+ * Utility making it easy to add tooltips positioned on the editor's cursor. Before you
+ * can show the tooltip, a {@link cursorPosition} extension must be added to the editor.
+ *
+ * This works by appending your tooltip to a flex container. You can style this container
+ * with the selector `.pce-tooltip` if needed. This container is then added to the editor's
+ * overlays. It also has `overflow-x: clip` to prevent your tooltip from overflowing in
+ * browsers that support it.
+ *
+ * If you want your tooltip to always be visible when scrolling horizontally, you can add
+ * `position: sticky` along with the `right` and `left` CSS properties to it.
+ *
  * @param editor Editor you want to add the tooltip to.
  * @param element Element for the tooltip.
  * @param fixedWidth If false, the tooltip will shrink instead of getting offset to

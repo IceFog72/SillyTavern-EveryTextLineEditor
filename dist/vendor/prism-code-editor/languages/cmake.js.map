@@ -1,0 +1,1 @@
+{"version":3,"file":"cmake.js","names":[],"sources":["../../src/languages/cmake.ts"],"sourcesContent":["import { languageMap } from \"../core\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.cmake = bracketIndenting({ line: \"#\", block: [\"#[[\", \"]]\"] })\r\n"],"mappings":";;;AAGA,YAAY,QAAQ,iBAAiB;CAAE,MAAM;CAAK,OAAO,CAAC,OAAO,IAAI;AAAE,CAAC"}

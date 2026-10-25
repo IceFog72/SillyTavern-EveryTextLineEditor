@@ -1,0 +1,1 @@
+{"version":3,"file":"vue.js","names":[],"sources":["../../src/languages/vue.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { markupComment, markupLanguage, voidTags, xmlOpeningTag } from \"./shared\"\r\n\r\nlanguageMap.vue = markupLanguage(markupComment, xmlOpeningTag, voidTags)\r\n"],"mappings":";;;;AAGA,YAAY,MAAM,eAAe,eAAe,eAAe,QAAQ"}

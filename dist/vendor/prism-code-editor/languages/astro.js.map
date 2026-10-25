@@ -1,0 +1,1 @@
+{"version":3,"file":"astro.js","names":[],"sources":["../../src/languages/astro.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { astroOpeningTag, markupComment, markupLanguage, voidTags } from \"./shared\"\r\n\r\nlanguageMap.astro = markupLanguage(markupComment, astroOpeningTag, voidTags)\r\n"],"mappings":";;;;AAGA,YAAY,QAAQ,eAAe,eAAe,iBAAiB,QAAQ"}

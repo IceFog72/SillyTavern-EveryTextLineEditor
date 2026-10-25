@@ -167,15 +167,19 @@ export class HistoryStore {
         return { commits, sources };
     }
     async clearAll() {
-        if (!this.db)
-            return;
+        await this.open();
         return new Promise((resolve, reject) => {
             const transaction = this.db.transaction(['commits', 'sources'], 'readwrite');
             transaction.objectStore('commits').clear();
             transaction.objectStore('sources').clear();
             transaction.oncomplete = () => resolve();
             transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error);
         });
+    }
+    close() {
+        this.db?.close();
+        this.db = null;
     }
     async hashContent(content) {
         try {

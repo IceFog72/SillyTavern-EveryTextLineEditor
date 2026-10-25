@@ -1,0 +1,20 @@
+import { a as languages } from "../../core-Dr0o9A-8.js";
+import { t as boolean } from "../../patterns-DSInPV_c.js";
+//#region src/prism/languages/llvm.js
+languages.llvm = {
+	"comment": /;.*/,
+	"string": /"[^"]*"/g,
+	"boolean": boolean,
+	"variable": /[%@!#](?:(?!\d)(?:[-\w$.]|\\[a-f\d]{2})+|\d+)/i,
+	"label": /(?!\d)(?:[-\w$.]|\\[a-f\d]{2})+:/i,
+	"type": {
+		pattern: /\b(?:double|float|fp128|half|i[1-9]\d*|label|metadata|ppc_fp128|token|void|x86_fp80|x86_mmx)\b/,
+		alias: "class-name"
+	},
+	"keyword": /\b[a-z_][a-z_\d]*\b/,
+	"number": /[+-]?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b|\b0x[a-fA-F\d]+\b|\b0xK[a-fA-F\d]{20}\b|\b0x[ML][a-fA-F\d]{32}\b|\b0xH[a-fA-F\d]{4}\b/,
+	"punctuation": /[()[\]{}.,;!=<>*]/
+};
+//#endregion
+
+//# sourceMappingURL=llvm.js.map

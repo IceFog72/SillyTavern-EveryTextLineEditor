@@ -1,0 +1,27 @@
+import { a as languages } from "../../core-Dr0o9A-8.js";
+import { i as clikePunctuation } from "../../patterns-DSInPV_c.js";
+//#region src/prism/languages/cypher.js
+languages.cypher = {
+	"comment": /\/\/.*/,
+	"string": /"(?:\\.|[^\\\n"])*"|'(?:\\.|[^\\\n'])*'/g,
+	"class-name": {
+		pattern: /(:\s*)(?:\w+|`(?:[^\\\n`])*`)(?=\s*[{):])/g,
+		lookbehind: true
+	},
+	"relationship": {
+		pattern: /(-\[\s*(?:\w+\s*|`(?:[^\\\n`])*`\s*)?:\s*|\|\s*:\s*)(?:\w+|`(?:[^\\\n`])*`)/g,
+		lookbehind: true,
+		alias: "property"
+	},
+	"identifier": /`(?:[^\\\n`])*`/g,
+	"variable": /\$\w+/,
+	"keyword": /\b(?:add|and|asc?|ascending|assert|by|c?all|case|commit|constraint|contains|create|csv|delete|desc|descending|detach|distinct|do|drop|else|ends?|exists|for|foreach|in|index|is|join|key|limit|load|mandatory|match|merge|node|not|of|on|optional|order(?=\s+by)|periodic|remove|require|return|scalar|scan|set|skip|starts?|[tw]hen|union|unique|unwind|using|where|with|x?or|yield)\b/i,
+	"function": /\b\w+(?=\s*\()/,
+	"boolean": /\b(?:false|true|null)\b/i,
+	"number": /\b(?:0x[a-fA-F\d]+|\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/,
+	"operator": /<--?|--?>?|<>|=~?|[<>]=?|[:%|^/*+]|\.{2,3}/,
+	"punctuation": clikePunctuation
+};
+//#endregion
+
+//# sourceMappingURL=cypher.js.map

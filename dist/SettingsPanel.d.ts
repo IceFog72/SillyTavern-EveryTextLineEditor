@@ -13,6 +13,7 @@ export interface SettingsPanelHost {
     setEditorEngine(engine: EditorEngine): Promise<void>;
     setScrollSync(mode: SyncMode): void;
     setIndentMode(mode: IndentMode): void;
+    setAutoCollapseSidebar(enabled: boolean): void;
     exportHistory(): Promise<void>;
     clearHistory(): Promise<void>;
 }

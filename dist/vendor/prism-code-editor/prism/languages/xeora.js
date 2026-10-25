@@ -1,0 +1,75 @@
+import { a as languages } from "../../core-Dr0o9A-8.js";
+import { i as insertBefore, n as clone } from "../../language-CXbc22uF.js";
+import "./markup.js";
+//#region src/prism/languages/xeora.js
+var xeora = languages.xeoracube = languages.xeora = clone(languages.html);
+var variable = {
+	pattern: /(?:[,|])@?(?:#+|[~=^*+-])?[\w.]+/,
+	inside: {
+		"punctuation": /[,.|]/,
+		"operator": /#+|[~=^@*+-]/
+	}
+};
+var blockPunctuation = [{
+	pattern: /\$(?:\w:|C#\d|C)?/,
+	inside: { "tag": /#\d/ }
+}, /[[\]{:]/];
+insertBefore(xeora, "markup-bracket", {
+	"constant": {
+		pattern: /\$(?:DomainContents|PageRenderDuration)\$/,
+		inside: { "punctuation": /\$/ }
+	},
+	"variable": {
+		pattern: /\$@?(?:[~=^*+-]|#*)[\w.]+\$/,
+		inside: {
+			"punctuation": /[$.]/,
+			"operator": /[~=^@*+-]|#+/
+		}
+	},
+	"function-inline": {
+		pattern: /\$F:[\w.-]+\?[\w.-]+(?:,(?:(?:@[-#]*\w+\.[\w+.]\.*)*\|)*(?:(?:[\w+]|[-#*.~^]+[\w+]|=\S)(?:[^$=]|=+[^=])*=*|(?:@[-#]*\w+\.[\w+.]\.*)+(?:(?:[\w+]|[-#*~^][-#*.~^]*[\w+]|=\S)(?:[^$=]|=+[^=])*=*)?)?)?\$/,
+		alias: "function",
+		inside: {
+			"variable": variable,
+			"punctuation": /\$\w:|[$?.,:|]/
+		}
+	},
+	"function-block": {
+		pattern: /\$XF:\{[\w.-]+\?[\w.-]+(?:,(?:(?:@[-#]*\w+\.[\w+.]\.*)*\|)*(?:(?:[\w+]|[-#*.~^]+[\w+]|=\S)(?:[^$=]|=+[^=])*=*|(?:@[-#]*\w+\.[\w+.]\.*)+(?:(?:[\w+]|[-#*~^][-#*.~^]*[\w+]|=\S)(?:[^$=]|=+[^=])*=*)?)?)?\}:XF\$/,
+		alias: "function",
+		inside: {
+			"variable": variable,
+			"punctuation": /[$?{}.,:|]/
+		}
+	},
+	"directive-inline": {
+		pattern: /\$\w(?:#\d+\+?)?(?:\[[\w.-]+\])?:[\w./-]+\$/,
+		alias: "function",
+		inside: { "punctuation": blockPunctuation }
+	},
+	"directive-block-open": {
+		pattern: /\$\w+:\{|\$\w(?:#\d+\+?)?(?:\[[\w.-]+\])?:[\w.-]+:\{(?:![A-Z]+)?/,
+		alias: "function",
+		inside: {
+			"punctuation": blockPunctuation,
+			"attribute": {
+				pattern: /!.+/,
+				alias: "keyword",
+				inside: { "punctuation": /!/ }
+			}
+		}
+	},
+	"directive-block-separator": {
+		pattern: /\}:[\w.-]+:\{/,
+		alias: "function",
+		inside: { "punctuation": /[{}:]/ }
+	},
+	"directive-block-close": {
+		pattern: /\}:[\w.-]+\$/,
+		alias: "function",
+		inside: { "punctuation": /[$}:]/ }
+	}
+});
+//#endregion
+
+//# sourceMappingURL=xeora.js.map

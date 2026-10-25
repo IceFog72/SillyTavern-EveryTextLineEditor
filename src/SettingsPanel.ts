@@ -1,9 +1,11 @@
 import { EDITOR_ENGINES, INDENT_MODES, NAME, STORAGE, SYNC_MODES } from './constants.js';
 import { DomRefs, EditorEngine, IndentMode, SyncMode } from './types.js';
+import { getSetting } from './settings.js';
 
-const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
-const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
-const isFullJsonHistoryIgnored = () => JSON.parse(localStorage.getItem(STORAGE.ignoreFullJsonHistory) || 'true');
+const isSpellCheckEnabled = () => getSetting<boolean>(STORAGE.spellCheck, false);
+const isMonacoMinimapEnabled = () => getSetting<boolean>(STORAGE.monacoMinimap, false);
+const isFullJsonHistoryIgnored = () => getSetting<boolean>(STORAGE.ignoreFullJsonHistory, true);
+const isAutoCollapseSidebarEnabled = () => getSetting<boolean>(STORAGE.autoCollapseSidebar, true);
 
 export interface SettingsPanelHost {
     dom: DomRefs;
@@ -19,6 +21,7 @@ export interface SettingsPanelHost {
     setEditorEngine(engine: EditorEngine): Promise<void>;
     setScrollSync(mode: SyncMode): void;
     setIndentMode(mode: IndentMode): void;
+    setAutoCollapseSidebar(enabled: boolean): void;
     exportHistory(): Promise<void>;
     clearHistory(): Promise<void>;
 }
@@ -50,13 +53,16 @@ export function renderSettingsPanel(host: SettingsPanelHost): HTMLElement {
 
 function renderSharedEditorSettings(host: SettingsPanelHost): HTMLElement {
     const editorGroup = host.createPropGroup('Shared Editor');
-    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => host.setWordWrap(!JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true')));
+    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => host.setWordWrap(!getSetting<boolean>(STORAGE.wordWrap, true)));
     wrapButton.dataset.setting = 'wrap';
     const spellButton = host.makeTextButton('Spell Check', 'fa-spell-check', () => host.setSpellCheck(!isSpellCheckEnabled()));
     spellButton.dataset.setting = 'spell';
+    const autoCollapseButton = host.makeTextButton('Auto-Collapse Sidebar', 'fa-table-columns', () => host.setAutoCollapseSidebar(!isAutoCollapseSidebarEnabled()));
+    autoCollapseButton.dataset.setting = 'autoCollapseSidebar';
+    autoCollapseButton.title = 'Automatically collapse the sidebar when the panel width is below 800 px';
     const editorButtons = document.createElement('div');
     editorButtons.classList.add('etle--settingsButtonRow');
-    editorButtons.append(wrapButton, spellButton);
+    editorButtons.append(wrapButton, spellButton, autoCollapseButton);
     editorGroup.append(editorButtons);
     return editorGroup;
 }

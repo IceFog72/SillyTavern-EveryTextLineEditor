@@ -19,6 +19,7 @@ import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCha
 import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
+import { getSetting, setSetting } from './settings.js';
 
 const GROUP_ORDER: Record<string, number> = {
     'Chat Completion Prompts': 10,
@@ -40,14 +41,14 @@ const JSON_SOURCE_ORDER = 1_000_000;
 
 export const getCollapsedGroups = (): Set<string> => {
     try {
-        return new Set(JSON.parse(localStorage.getItem(STORAGE.collapsedGroups) || '[]'));
+        return new Set(getSetting<string[]>(STORAGE.collapsedGroups, []));
     } catch {
         return new Set();
     }
 };
 
 export const setCollapsedGroups = (groups: Set<string>) => {
-    localStorage.setItem(STORAGE.collapsedGroups, JSON.stringify([...groups]));
+    setSetting(STORAGE.collapsedGroups, [...groups]);
 };
 
 const splitLines = (text: unknown): string[] => String(text ?? '').split('\n');
@@ -89,9 +90,11 @@ const replaceObjectContents = (target: Record<string, any>, source: Record<strin
 
 const normalizePromptContent = (value: unknown): string => String(value ?? '').trim().replace(/\r\n/g, '\n');
 
+// Snapshots hold whole prompts; keep them in browser storage, not settings.json.
 const getPromptInspectorCurrent = () => localStorage.getItem(STORAGE.promptInspectorCurrent) ?? '';
 const getPromptInspectorPrevious = () => localStorage.getItem(STORAGE.promptInspectorPrevious) ?? '';
-const isPromptInspectorEnabled = () => localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+const getPromptInspectorUpdatedAt = () => localStorage.getItem(STORAGE.promptInspectorUpdatedAt) ?? '';
+const isPromptInspectorEnabled = () => getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
 
 export const setPromptInspectorSnapshot = (value: string) => {
     const current = getPromptInspectorCurrent();
@@ -617,7 +620,10 @@ const makeCharacterCardSources = (character: Record<string, any>, {
     const displayGroup = sourceGroup === 'Current Card' ? cardName : undefined;
     const sourceIdPrefix = idPrefix ?? `character-card:${avatar}`;
     const refresh = async () => {
-        activeCharacter = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
+        const next = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
+        // Current Card ids are shared by every character; never let a source follow a different one.
+        if (String(next.avatar ?? avatar) !== avatar) throw new Error(`Character "${cardName}" is no longer current.`);
+        activeCharacter = next;
         return activeCharacter;
     };
     const save = async () => {
@@ -640,6 +646,7 @@ const makeCharacterCardSources = (character: Record<string, any>, {
         save,
         meta: `Character card: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
         displayGroup,
+        identity: avatar,
     }));
 
     sources.push({
@@ -660,6 +667,7 @@ const makeCharacterCardSources = (character: Record<string, any>, {
         save,
         meta: `Character card JSON: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
         displayGroup,
+        identity: avatar,
     });
 
     return sources;
@@ -1156,10 +1164,10 @@ export const getSources = async (): Promise<TextSource[]> => {
         },
         save: () => {},
         toggle: () => {
-            localStorage.setItem(STORAGE.promptInspectorEnabled, String(!isPromptInspectorEnabled()));
+            setSetting(STORAGE.promptInspectorEnabled, !isPromptInspectorEnabled());
         },
-        meta: localStorage.getItem(STORAGE.promptInspectorUpdatedAt)
-            ? `Last inspected prompt: ${new Date(Number(localStorage.getItem(STORAGE.promptInspectorUpdatedAt))).toLocaleString()}`
+        meta: getPromptInspectorUpdatedAt()
+            ? `Last inspected prompt: ${new Date(Number(getPromptInspectorUpdatedAt())).toLocaleString()}`
             : 'Captures next generation prompt when enabled.',
     });
 

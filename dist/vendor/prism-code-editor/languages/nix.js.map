@@ -1,0 +1,1 @@
+{"version":3,"file":"nix.js","names":[],"sources":["../../src/languages/nix.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.nix = bracketIndenting({\r\n\tline: \"#\",\r\n\tblock: [\"/*\", \"*/\"],\r\n})\r\n"],"mappings":";;;AAGA,YAAY,MAAM,iBAAiB;CAClC,MAAM;CACN,OAAO,CAAC,MAAM,IAAI;AACnB,CAAC"}

@@ -1,4 +1,5 @@
 @import url('./dist/vendor/prism-code-editor/layout.css');
+@import url('./dist/vendor/prism-code-editor/guides.css');
 @import url('./dist/vendor/prism-code-editor/search.css');
 @import url('./dist/vendor/prism-code-editor/themes/vs-code-dark.css');
 
@@ -655,8 +656,36 @@
     overflow: hidden;
 }
 
+.etle--actions-left[hidden] {
+    display: none;
+}
+
 .etle--actions-right {
     margin-left: auto;
+}
+
+.etle--main {
+    container: etle-main / inline-size;
+}
+
+/* Narrow editor: keep the title and main actions on row one, metadata actions on row two. */
+@container etle-main (max-width: 62rem) {
+    .etle--header {
+        flex-wrap: wrap;
+        height: auto;
+        row-gap: 0.4rem;
+    }
+
+    .etle--actions-left {
+        order: 3;
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        overflow: visible;
+    }
+
+    .etle--actions-left:empty {
+        display: none;
+    }
 }
 
 .etle--toggle {
@@ -910,22 +939,29 @@
     pointer-events: none;
 }
 
+/* content-box keeps the tint off the line-number gutter; the number colour marks it instead. */
+.etle--showDiff .pce-line.etle--diffRemoved,
+.etle--showDiff .pce-line.etle--diffAdded,
+.etle--showDiff .pce-line.etle--diffPlaceholder {
+    background-clip: content-box;
+}
+
 .etle--showDiff .pce-line.etle--diffRemoved {
-    background: rgba(164, 52, 58, 0.34);
+    background-color: rgba(164, 52, 58, 0.34);
 }
 
 .etle--showDiff .pce-line.etle--diffAdded {
-    background: rgba(54, 129, 70, 0.34);
+    background-color: rgba(54, 129, 70, 0.34);
 }
 
 .etle--showDiff .pce-line.etle--diffPlaceholder {
-    background: rgba(255, 255, 255, 0.035);
+    background-color: rgba(255, 255, 255, 0.035);
 }
 
 .etle--showDiff .pce-line.etle--diffPlaceholder::after {
     content: '';
     position: absolute;
-    inset: 1px 0;
+    inset: 1px 0 1px var(--padding-left);
     pointer-events: none;
     background-image: repeating-linear-gradient(125deg,
             rgba(255, 255, 255, 0.055) 0,
@@ -963,6 +999,13 @@
     color: var(--SmartThemeEmColor);
 }
 
+.etle--initialCommitBtn {
+    width: fit-content;
+    max-width: 100%;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
 .etle--sourceDialog {
     width: min(68rem, calc(100vw - 2rem));
     height: min(42rem, calc(100dvh - 2rem));
@@ -971,6 +1014,8 @@
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 8px;
     background: var(--SmartThemeBlurTintColor);
+    /* The theme tint is translucent and blur may be 0; use the tint's colour at full opacity. */
+    background: rgb(from var(--SmartThemeBlurTintColor) r g b / 1);
     color: var(--SmartThemeBodyColor);
 }
 
@@ -1260,6 +1305,24 @@
     box-sizing: border-box !important;
 }
 
+/* Other extensions load unscoped prism-code-editor 2.x layout CSS (line margins,
+   attr(data-line) numbers). Re-assert the 5.x line layout inside this panel. */
+#etle--panel .prism-code-editor .pce-line {
+    padding: 0 var(--_pse) 0 var(--padding-left);
+    margin: 0;
+}
+
+#etle--panel .prism-code-editor.show-line-numbers .pce-line::before {
+    counter-increment: line;
+    content: counter(line);
+    color: var(--pce-line-number);
+}
+
+#etle--panel .prism-code-editor.pce-wrap .pce-line::before {
+    position: absolute;
+    margin: 0;
+}
+
 .etle--triggerSelectWrap {
     display: inline-flex;
     align-items: center;
@@ -1388,8 +1451,22 @@
 
 .etle--settingsButtonRow {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
-    gap: 0.3rem;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.35rem;
+}
+
+.etle--settingsButtonRow > .etle--textButton {
+    width: 100%;
+    margin: 0;
+    justify-content: flex-start;
+    gap: 0.45rem;
+    padding: 0.35rem 0.55rem;
+    text-align: start;
+    line-height: 1.2;
+}
+
+.etle--settingsButtonRow > .etle--textButton.etle--activeButton {
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
 }
 
 .etle--settingsGrid {

@@ -1,0 +1,1 @@
+{"version":3,"file":"processing.js","names":[],"sources":["../../src/languages/processing.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.processing = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,aAAa,iBAAiB"}

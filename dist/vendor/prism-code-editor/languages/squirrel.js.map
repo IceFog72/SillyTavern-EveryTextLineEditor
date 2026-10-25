@@ -1,0 +1,1 @@
+{"version":3,"file":"squirrel.js","names":[],"sources":["../../src/languages/squirrel.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting, clikeComment, clikeIndent } from \"./shared\"\r\n\r\nlanguageMap.squirrel = bracketIndenting(clikeComment, clikeIndent)\r\n"],"mappings":";;;AAGA,YAAY,WAAW,iBAAiB,cAAc,WAAW"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"magma.js","names":[],"sources":["../../src/languages/magma.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.magma = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,QAAQ,iBAAiB"}

@@ -1,8 +1,8 @@
 import { MonacoSpellchecker } from './vendor/monaco-spellchecker/spellchecker.es.js';
-import './vendor/prism-code-editor/grammars/yaml.js';
-import './vendor/prism-code-editor/grammars/markdown.js';
-import './vendor/prism-code-editor/grammars/json.js';
-import './vendor/prism-code-editor/grammars/css.js';
+import './vendor/prism-code-editor/prism/languages/yaml.js';
+import './vendor/prism-code-editor/prism/languages/markdown.js';
+import './vendor/prism-code-editor/prism/languages/json.js';
+import './vendor/prism-code-editor/prism/languages/css.js';
 import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
@@ -60,6 +60,10 @@ export declare class EveryTextLineEditor {
     _popupPreviousParent: Element | null;
     _popupEscHandler: ((e: KeyboardEvent) => void) | null;
     syncWandToggleButton?: () => void;
+    panelResizeObserver: ResizeObserver | null;
+    lifecycle: AbortController;
+    diffScrollBindings: AbortController | null;
+    detachedDraftSource: TextSource | null;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -113,6 +117,8 @@ export declare class EveryTextLineEditor {
     guessLanguageForSource(source: TextSource): Language;
     setSourceLanguage(source: TextSource, lang: Language): void;
     toggleSource(source: any): Promise<void>;
+    rebindSelectedSource(source: TextSource): void;
+    keepDetachedDraft(source: TextSource): void;
     selectSource(id: any, { force }?: {
         force?: boolean;
     }): Promise<void>;
@@ -125,10 +131,11 @@ export declare class EveryTextLineEditor {
     startSourceWatcher(): void;
     stopSourceWatcher(): void;
     refreshSelectedSourceBaseline(): Promise<void>;
-    setWordWrap(enabled: any): void;
+    setWordWrap(enabled: boolean): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
     setIgnoreFullJsonHistory(enabled: boolean): void;
+    setAutoCollapseSidebar(enabled: boolean): void;
     isSourceIgnoredForHistory(source?: TextSource | null): boolean;
     isMonacoMinimapEffectivelyEnabled(): boolean;
     applyMonacoMinimapOption(): void;
@@ -147,6 +154,33 @@ export declare class EveryTextLineEditor {
     shouldIgnoreSpellWord(word: string): boolean;
     cycleIndentMode(): void;
     setIndentMode(mode: IndentMode): void;
+    getPlainTextLanguage(): {
+        readonly id: "markdown";
+        readonly label: ".md";
+    } | {
+        readonly id: "text";
+        readonly label: "text";
+    };
+    setPrismEditorLanguage(editor: PrismEditorLike | null, lang: Language): boolean;
+    setActiveLanguage(lang: Language, { persist, updateUi }?: {
+        persist?: boolean;
+        updateUi?: boolean;
+    }): {
+        readonly id: "markdown";
+        readonly label: ".md";
+    } | {
+        readonly id: "json";
+        readonly label: ".json";
+    } | {
+        readonly id: "yaml";
+        readonly label: ".yaml";
+    } | {
+        readonly id: "css";
+        readonly label: ".css";
+    } | {
+        readonly id: "text";
+        readonly label: "text";
+    };
     setLanguage(lang: Language): void;
     toggleLanguageMenu(): void;
     openLanguageMenu(): void;
@@ -184,6 +218,7 @@ export declare class EveryTextLineEditor {
     };
     updateDiffSideLabels(): void;
     highlightDiff(diff: any): void;
+    clearDiffMarks(): void;
     applyDiffMarks(editor: any, marks: any, activeMark: any): void;
     getCurrentEditorValue(): any;
     getMonacoLanguageId(): "markdown" | "json" | "yaml" | "css" | "plaintext";

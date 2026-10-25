@@ -1,0 +1,1 @@
+{"version":3,"file":"kumir.js","names":[],"sources":["../../src/languages/kumir.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.kumir = bracketIndenting({\r\n\tline: \"|\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,QAAQ,iBAAiB,EACpC,MAAM,IACP,CAAC"}

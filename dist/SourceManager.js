@@ -18,6 +18,7 @@ import { extension_settings } from '../../../../extensions.js';
 import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCharactersDebounced, saveSettingsDebounced, this_chid } from '../../../../../script.js';
 import { diffLines } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
+import { getSetting, setSetting } from './settings.js';
 const GROUP_ORDER = {
     'Chat Completion Prompts': 10,
     'Utility Prompts': 20,
@@ -36,14 +37,14 @@ const GROUP_ORDER = {
 const JSON_SOURCE_ORDER = 1_000_000;
 export const getCollapsedGroups = () => {
     try {
-        return new Set(JSON.parse(localStorage.getItem(STORAGE.collapsedGroups) || '[]'));
+        return new Set(getSetting(STORAGE.collapsedGroups, []));
     }
     catch {
         return new Set();
     }
 };
 export const setCollapsedGroups = (groups) => {
-    localStorage.setItem(STORAGE.collapsedGroups, JSON.stringify([...groups]));
+    setSetting(STORAGE.collapsedGroups, [...groups]);
 };
 const splitLines = (text) => String(text ?? '').split('\n');
 const GENERATION_TRIGGER_IDS = new Set(GENERATION_TRIGGERS.map(trigger => trigger.id));
@@ -74,9 +75,11 @@ const replaceObjectContents = (target, source) => {
     Object.assign(target, source);
 };
 const normalizePromptContent = (value) => String(value ?? '').trim().replace(/\r\n/g, '\n');
+// Snapshots hold whole prompts; keep them in browser storage, not settings.json.
 const getPromptInspectorCurrent = () => localStorage.getItem(STORAGE.promptInspectorCurrent) ?? '';
 const getPromptInspectorPrevious = () => localStorage.getItem(STORAGE.promptInspectorPrevious) ?? '';
-const isPromptInspectorEnabled = () => localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+const getPromptInspectorUpdatedAt = () => localStorage.getItem(STORAGE.promptInspectorUpdatedAt) ?? '';
+const isPromptInspectorEnabled = () => getSetting(STORAGE.promptInspectorEnabled, false);
 export const setPromptInspectorSnapshot = (value) => {
     const current = getPromptInspectorCurrent();
     if (current && current !== value)
@@ -516,7 +519,11 @@ const makeCharacterCardSources = (character, { group, idPrefix, refreshCharacter
     const displayGroup = sourceGroup === 'Current Card' ? cardName : undefined;
     const sourceIdPrefix = idPrefix ?? `character-card:${avatar}`;
     const refresh = async () => {
-        activeCharacter = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
+        const next = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
+        // Current Card ids are shared by every character; never let a source follow a different one.
+        if (String(next.avatar ?? avatar) !== avatar)
+            throw new Error(`Character "${cardName}" is no longer current.`);
+        activeCharacter = next;
         return activeCharacter;
     };
     const save = async () => {
@@ -538,6 +545,7 @@ const makeCharacterCardSources = (character, { group, idPrefix, refreshCharacter
         save,
         meta: `Character card: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
         displayGroup,
+        identity: avatar,
     }));
     sources.push({
         id: `${sourceIdPrefix}:json`,
@@ -558,6 +566,7 @@ const makeCharacterCardSources = (character, { group, idPrefix, refreshCharacter
         save,
         meta: `Character card JSON: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
         displayGroup,
+        identity: avatar,
     });
     return sources;
 };
@@ -1036,10 +1045,10 @@ export const getSources = async () => {
         },
         save: () => { },
         toggle: () => {
-            localStorage.setItem(STORAGE.promptInspectorEnabled, String(!isPromptInspectorEnabled()));
+            setSetting(STORAGE.promptInspectorEnabled, !isPromptInspectorEnabled());
         },
-        meta: localStorage.getItem(STORAGE.promptInspectorUpdatedAt)
-            ? `Last inspected prompt: ${new Date(Number(localStorage.getItem(STORAGE.promptInspectorUpdatedAt))).toLocaleString()}`
+        meta: getPromptInspectorUpdatedAt()
+            ? `Last inspected prompt: ${new Date(Number(getPromptInspectorUpdatedAt())).toLocaleString()}`
             : 'Captures next generation prompt when enabled.',
     });
     if (typeof power_user?.persona_description === 'string') {

@@ -1,0 +1,1 @@
+{"version":3,"file":"actionscript.js","names":[],"sources":["../../src/languages/actionscript.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { clikeComment, markupLanguage } from \"./shared\"\r\n\r\nlanguageMap.actionscript = markupLanguage(clikeComment)\r\n"],"mappings":";;;AAGA,YAAY,eAAe,eAAe,YAAY"}

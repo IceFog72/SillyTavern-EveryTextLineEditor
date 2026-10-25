@@ -69,6 +69,8 @@ export interface TextSource {
     label: string;
     group: string;
     displayGroup?: string;
+    /** Backing object when `id` alone is shared, e.g. the Current Card avatar. */
+    identity?: string;
     groupOrder?: number;
     order?: number;
     readonly: boolean;
@@ -124,7 +126,7 @@ export interface TextSource {
 export interface PrismEditorLike {
     value: string;
     textarea: HTMLTextAreaElement;
-    scrollContainer: HTMLElement;
+    container: HTMLElement;
     wrapper: HTMLElement;
     setOptions(options: Record<string, any>): void;
     update?(): void;

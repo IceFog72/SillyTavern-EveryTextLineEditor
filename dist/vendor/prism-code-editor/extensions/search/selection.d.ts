@@ -1,6 +1,6 @@
-import { Extension } from "../..";
-import { SearchAPI, SearchFilter } from "./search";
-export interface SelectionMatchHighlighter extends Extension {
+import { BasicExtension } from '../../index.js';
+import { SearchAPI, SearchFilter } from './search.js';
+export interface SelectionMatchHighlighter extends BasicExtension {
     /**
      * Search API used by the extension.
      * Can be used get the position of the matches for example.
@@ -46,5 +46,5 @@ declare const highlightSelectionMatches: (caseSensitive?: boolean, minLength?: n
  * )
  * ```
  */
-declare const highlightCurrentWord: (filter?: SearchFilter, includeHyphens?: ((cursorPosition: number) => boolean) | undefined) => WordHighlighter;
+declare const highlightCurrentWord: (filter?: SearchFilter, includeHyphens?: (cursorPosition: number) => boolean) => WordHighlighter;
 export { highlightSelectionMatches, highlightCurrentWord };

@@ -1,0 +1,1 @@
+{"version":3,"file":"cobol.js","names":[],"sources":["../../src/languages/cobol.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.cobol = {\r\n\tcomments: {\r\n\t\tline: \"*\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,QAAQ,EACnB,UAAU,EACT,MAAM,IACP,EACD"}

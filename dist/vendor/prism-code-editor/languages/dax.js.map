@@ -1,0 +1,1 @@
+{"version":3,"file":"dax.js","names":[],"sources":["../../src/languages/dax.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.dax = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,MAAM,iBAAiB"}

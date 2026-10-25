@@ -1,0 +1,1 @@
+{"version":3,"file":"vbnet.js","names":[],"sources":["../../src/languages/vbnet.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.vbnet = {\r\n\tcomments: {\r\n\t\tline: \"'\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,QAAQ,EACnB,UAAU,EACT,MAAM,IACP,EACD"}

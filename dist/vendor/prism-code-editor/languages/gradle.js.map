@@ -1,0 +1,1 @@
+{"version":3,"file":"gradle.js","names":[],"sources":["../../src/languages/gradle.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.gradle = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,SAAS,iBAAiB"}

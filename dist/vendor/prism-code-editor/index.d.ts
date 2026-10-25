@@ -1,3 +1,2 @@
-export * from "./types";
-export { createEditor, editorFromPlaceholder, isChrome, isMac, isWebKit, languageMap, setIgnoreTab, numLines, ignoreTab, } from "./core";
-export { Prism } from "./prismCore";
+export * from './types.js';
+export { createEditor, editorFromPlaceholder, languageMap, numLines, } from './core.js';

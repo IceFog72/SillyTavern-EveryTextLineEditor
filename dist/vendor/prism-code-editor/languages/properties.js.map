@@ -1,0 +1,1 @@
+{"version":3,"file":"properties.js","names":[],"sources":["../../src/languages/properties.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.properties = {\r\n\tcomments: {\r\n\t\tline: \"#\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,aAAa,EACxB,UAAU,EACT,MAAM,IACP,EACD"}

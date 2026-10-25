@@ -1,0 +1,1 @@
+{"version":3,"file":"ocaml.js","names":[],"sources":["../../src/languages/ocaml.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.ocaml = bracketIndenting({\r\n\tblock: [\"(*\", \"*)\"],\r\n})\r\n"],"mappings":";;;AAGA,YAAY,QAAQ,iBAAiB,EACpC,OAAO,CAAC,MAAM,IAAI,EACnB,CAAC"}

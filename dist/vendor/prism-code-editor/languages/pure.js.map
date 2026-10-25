@@ -1,0 +1,1 @@
+{"version":3,"file":"pure.js","names":[],"sources":["../../src/languages/pure.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.pure = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,OAAO,iBAAiB"}

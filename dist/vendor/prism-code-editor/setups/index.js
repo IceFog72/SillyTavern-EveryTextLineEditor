@@ -1,54 +1,81 @@
-import { g as d, c as m } from "../index-svJglgH1.js";
-import { loadTheme as c } from "../themes/index.js";
-import "../prismCore-AxbjJFmh.js";
-const r = (i, s, n) => {
-  const e = document.createElement("style");
-  e.textContent = s, n && (e.id = n), i.append(e);
-}, g = (i, s) => {
-  const n = i.scrollContainer.parentNode;
-  if (n instanceof ShadowRoot) {
-    const e = n.getElementById("theme");
-    e && c(s).then((t) => {
-      t && (e.textContent = t);
-    });
-  }
-}, a = (i, s, n) => {
-  const e = d(i), t = e.shadowRoot || e.attachShadow({ mode: "open" }), o = m();
-  return Promise.all([import("../styles-GYla42XD.js"), c(s.theme)]).then(([h, l]) => {
-    o.removed || (r(t, h.default), r(t, l || "", "theme"), t.append(o.scrollContainer), o.setOptions(s), n && n());
-  }), o;
-}, u = (i, s, n) => {
-  import("../common-SKRLiXwL.js").then((t) => {
-    t.addExtensions(e);
-  });
-  const e = a(i, s, n);
-  return import("../selection-D4-XLNej.js").then((t) => {
-    e.addExtensions(t.highlightSelectionMatches());
-  }), e;
-}, x = (i, s, n) => {
-  import("../common-SKRLiXwL.js").then((o) => {
-    o.addExtensions(t);
-  });
-  const e = d(i), t = a(e, s, n);
-  return import("../search-AcdErlHO.js").then((o) => {
-    t.removed || r(e.shadowRoot, o.default);
-  }), import("../extensions/search/index.js").then((o) => {
-    t.addExtensions(o.highlightSelectionMatches(), o.searchWidget());
-  }), import("../extensions/matchTags.js").then((o) => {
-    t.addExtensions(o.matchTags());
-  }), t;
-}, w = (i, s, n) => {
-  import("../readonly-zT5TACqM.js").then((o) => {
-    o.addExtensions(t), t.removed || r(e.shadowRoot, o.style);
-  });
-  const e = d(i), t = a(e, s, n);
-  return t;
+import { i as doc, n as createEditor, o as getElement } from "../core-BIWFpCIO.js";
+import { loadTheme } from "../themes/index.js";
+//#region src/setups/index.ts
+var addStyles = (shadow, styles, id) => {
+	let style = shadow.getElementById(id);
+	if (!style) {
+		style = doc.createElement("style");
+		style.id = id;
+		shadow.append(style);
+	}
+	style.textContent = styles;
 };
-export {
-  u as basicEditor,
-  x as fullEditor,
-  a as minimalEditor,
-  w as readonlyEditor,
-  g as updateTheme
+/**
+* Adds an editor inside a shadow root to the given element and asynchronously loads the styles.
+* @param container Must be an element you can attach a shadow root to.
+* @param options Options to create the editor as well as the theme to use.
+* @param onLoad Function called when the styles are loaded and the editor is
+* appended to the DOM.
+* @returns Object to interact with the editor.
+*/
+var minimalEditor = (container, options, onLoad) => {
+	const el = getElement(container);
+	const shadow = el.shadowRoot || el.attachShadow({ mode: "open" });
+	const editor = createEditor(null, null, { update(_, options) {
+		if (theme != (theme = options.theme)) loadTheme(theme).then((style) => {
+			if (style && theme == options.theme) addStyles(shadow, style, "theme");
+		});
+	} });
+	const remove = editor.remove;
+	let removed;
+	let theme = options.theme;
+	editor.remove = () => {
+		remove();
+		removed = true;
+	};
+	Promise.all([import("../styles-BSFdG5zS.js"), loadTheme(options.theme)]).then(([style, theme]) => {
+		if (!removed) {
+			addStyles(shadow, style.default, "layout-style");
+			addStyles(shadow, theme || "", "theme");
+			shadow.append(editor.container);
+			editor.setOptions(options);
+			onLoad && onLoad();
+		}
+	});
+	return editor;
 };
+/**
+* Same as {@link minimalEditor}, but also adds the {@link indentGuides},
+* {@link highlightSelectionMatches}, {@link matchBrackets}, {@link highlightBracketPairs},
+* {@link defaultCommands}, {@link editHistory}, {@link searchWidget},
+* {@link showInvisibles}, and {@link matchTags} extensions and language specific
+* behavior.
+*/
+var basicEditor = (container, options, onLoad) => {
+	import("../basic-BZIQXUoi.js").then((mod) => {
+		addStyles(el.shadowRoot, mod.style, "search-style");
+		editor.addExtensions(...mod.basic());
+	});
+	const el = getElement(container);
+	const editor = minimalEditor(el, options, onLoad);
+	return editor;
+};
+/**
+* Same as {@link minimalEditor}, but also adds the {@link copyButton}, {@link matchBrackets},
+* {@link highlightBracketPairs}, {@link matchTags}, {@link indentGuides}, {@link highlightSelectionMatches},
+* and {@link readOnlyCodeFolding} extensions. No commands are added which makes this setup
+* best used with the `readOnly` option set to true.
+*/
+var readonlyEditor = (container, options, onLoad) => {
+	import("../readonly-BFgqGP8L.js").then((mod) => {
+		mod.addExtensions(editor);
+		addStyles(el.shadowRoot, mod.style, "readonly-style");
+	});
+	const el = getElement(container);
+	const editor = minimalEditor(el, options, onLoad);
+	return editor;
+};
+//#endregion
+export { basicEditor, minimalEditor, readonlyEditor };
+
 //# sourceMappingURL=index.js.map

@@ -1,0 +1,1 @@
+{"version":3,"file":"svelte.js","names":[],"sources":["../../src/languages/svelte.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { astroOpeningTag, markupComment, markupLanguage, voidTags } from \"./shared\"\r\n\r\nlanguageMap.svelte = markupLanguage(markupComment, astroOpeningTag, voidTags)\r\n"],"mappings":";;;;AAGA,YAAY,SAAS,eAAe,eAAe,iBAAiB,QAAQ"}

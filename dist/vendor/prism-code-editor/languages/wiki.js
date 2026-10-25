@@ -1,0 +1,8 @@
+import { s as languageMap } from "../core-BIWFpCIO.js";
+import { w as voidTags } from "../utils--SPWoSa0.js";
+import { c as markupLanguage, d as xmlOpeningTag } from "../shared-DXMiLwjC.js";
+//#region src/languages/wiki.ts
+languageMap.wiki = markupLanguage({ block: ["/*", "*/"] }, xmlOpeningTag, voidTags);
+//#endregion
+
+//# sourceMappingURL=wiki.js.map

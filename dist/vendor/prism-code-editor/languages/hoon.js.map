@@ -1,0 +1,1 @@
+{"version":3,"file":"hoon.js","names":[],"sources":["../../src/languages/hoon.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.hoon = {\r\n\tcomments: {\r\n\t\tline: \"::\",\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,OAAO,EAClB,UAAU,EACT,MAAM,KACP,EACD"}

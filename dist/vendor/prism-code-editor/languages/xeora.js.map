@@ -1,0 +1,1 @@
+{"version":3,"file":"xeora.js","names":[],"sources":["../../src/languages/xeora.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { markupLanguage } from \"./shared\"\r\n\r\nlanguageMap.xeoracube = languageMap.xeora = markupLanguage()\r\n"],"mappings":";;;AAGA,YAAY,YAAY,YAAY,QAAQ,eAAe"}

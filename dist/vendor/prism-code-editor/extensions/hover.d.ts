@@ -1,0 +1,46 @@
+import { HoverOptions } from '../client/hover.js';
+import { BasicExtension, PrismEditor } from '../types.js';
+export type AllowedEditorPointerEvents = "pointermove" | "pointerdown" | "pointerup" | "click" | "mousemove" | "mousedown" | "mouseup";
+/**
+ * The editor lines have `pointer-events: none` which means that all pointer and mouse
+ * events are captured by the `textarea` element itself. This utlity can be used to add
+ * a subset of pointer and mouse listeners that will be called with the token the pointer
+ * is on. If the pointer isn't on a token, then the line itself will be passed to the
+ * listener.
+ *
+ * @param editor Editor to add the listener to.
+ * @param type Event to listen to.
+ * @param listener Listener called with the event and target token.
+ * @param lineFilter If a line won't have any tokens the listener is interested in, then
+ * this filter can return false to skip computing the target token at the cursor's
+ * position for a performance boost. If ommitted, the listener will be called for all
+ * lines.
+ * @returns Cleanup function to remove the listener.
+ */
+declare const addPointerListener: <T extends AllowedEditorPointerEvents>(editor: PrismEditor, type: T, listener: (e: HTMLElementEventMap[T], target: HTMLElement) => any, lineFilter?: (line: HTMLDivElement, lineNumber: number, e: HTMLElementEventMap[T]) => boolean) => () => void;
+export type EditorHoverOptions = HoverOptions & {
+    /**
+     * If a line won't have any tokens the callback is interested in, then this filter can
+     * return false to skip computing the target token at the cursor's position for a
+     * performance boost. If ommitted, the callback will be invoked for all lines.
+     */
+    filter?: (line: HTMLDivElement, lineNumber: number, e: PointerEvent) => boolean;
+};
+export type EditorHoverCallback<T extends {}> = (types: string[], language: string, text: string, element: HTMLSpanElement, editor: PrismEditor<T>) => (string | Node)[] | null | undefined;
+/**
+ * Utility that makes it easier to add hover descriptions to tokens.
+ * @param callback Function called when a token with only textual children is hovered.
+ *
+ * The function gets called with the following arguments:
+ * - `types`: Array with the token's type as the first element, followed by any alises.
+ * - `language`: The language at the token's position.
+ * - `text`: The `textContent` of the token.
+ * - `element`: The `<span>` element of the hovered token.
+ *
+ * Lastly, the function should return an array of children that get added to the tooltip.
+ * If `null` or `undefined` is returned, no tooltip is shown for the token.
+ * @param options Options for configuring the size and position of the tooltip and the
+ * line filter for better performance.
+ */
+declare const editorHoverDescriptions: <T extends {}>(callback: EditorHoverCallback<T>, options?: EditorHoverOptions) => BasicExtension<T>;
+export { addPointerListener, editorHoverDescriptions };

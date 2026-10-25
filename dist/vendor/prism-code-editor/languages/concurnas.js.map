@@ -1,0 +1,1 @@
+{"version":3,"file":"concurnas.js","names":[],"sources":["../../src/languages/concurnas.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.conc = languageMap.concurnas = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,OAAO,YAAY,YAAY,iBAAiB"}

@@ -1,0 +1,1 @@
+{"version":3,"file":"qsharp.js","names":[],"sources":["../../src/languages/qsharp.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.qs = languageMap.qsharp = bracketIndenting({\r\n\tline: \"//\",\r\n})\r\n"],"mappings":";;;AAGA,YAAY,KAAK,YAAY,SAAS,iBAAiB,EACtD,MAAM,KACP,CAAC"}

@@ -1,7 +1,9 @@
 import { EDITOR_ENGINES, INDENT_MODES, NAME, STORAGE, SYNC_MODES } from './constants.js';
-const isSpellCheckEnabled = () => JSON.parse(localStorage.getItem(STORAGE.spellCheck) || 'false');
-const isMonacoMinimapEnabled = () => JSON.parse(localStorage.getItem(STORAGE.monacoMinimap) || 'false');
-const isFullJsonHistoryIgnored = () => JSON.parse(localStorage.getItem(STORAGE.ignoreFullJsonHistory) || 'true');
+import { getSetting } from './settings.js';
+const isSpellCheckEnabled = () => getSetting(STORAGE.spellCheck, false);
+const isMonacoMinimapEnabled = () => getSetting(STORAGE.monacoMinimap, false);
+const isFullJsonHistoryIgnored = () => getSetting(STORAGE.ignoreFullJsonHistory, true);
+const isAutoCollapseSidebarEnabled = () => getSetting(STORAGE.autoCollapseSidebar, true);
 export function renderSettingsPanel(host) {
     const settingsPanel = document.createElement('section');
     host.dom.settingsPanel = settingsPanel;
@@ -19,13 +21,16 @@ export function renderSettingsPanel(host) {
 }
 function renderSharedEditorSettings(host) {
     const editorGroup = host.createPropGroup('Shared Editor');
-    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => host.setWordWrap(!JSON.parse(localStorage.getItem(STORAGE.wordWrap) || 'true')));
+    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => host.setWordWrap(!getSetting(STORAGE.wordWrap, true)));
     wrapButton.dataset.setting = 'wrap';
     const spellButton = host.makeTextButton('Spell Check', 'fa-spell-check', () => host.setSpellCheck(!isSpellCheckEnabled()));
     spellButton.dataset.setting = 'spell';
+    const autoCollapseButton = host.makeTextButton('Auto-Collapse Sidebar', 'fa-table-columns', () => host.setAutoCollapseSidebar(!isAutoCollapseSidebarEnabled()));
+    autoCollapseButton.dataset.setting = 'autoCollapseSidebar';
+    autoCollapseButton.title = 'Automatically collapse the sidebar when the panel width is below 800 px';
     const editorButtons = document.createElement('div');
     editorButtons.classList.add('etle--settingsButtonRow');
-    editorButtons.append(wrapButton, spellButton);
+    editorButtons.append(wrapButton, spellButton, autoCollapseButton);
     editorGroup.append(editorButtons);
     return editorGroup;
 }

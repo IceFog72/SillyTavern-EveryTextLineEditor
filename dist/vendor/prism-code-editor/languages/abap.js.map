@@ -1,0 +1,1 @@
+{"version":3,"file":"abap.js","names":[],"sources":["../../src/languages/abap.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\n\r\nlanguageMap.abap = {\r\n\tcomments: {\r\n\t\tline: '\"',\r\n\t},\r\n}\r\n"],"mappings":";;AAEA,YAAY,OAAO,EAClB,UAAU,EACT,MAAM,KACP,EACD"}

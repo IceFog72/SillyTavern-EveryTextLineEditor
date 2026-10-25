@@ -1,0 +1,1 @@
+{"version":3,"file":"django.js","names":[],"sources":["../../src/languages/django.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { markupTemplateLang } from \"./shared\"\r\n\r\nlanguageMap.jinja2 = markupTemplateLang(\"django\", {\r\n\tblock: [\"{#\", \"#}\"],\r\n})\r\n"],"mappings":";;;AAGA,YAAY,SAAS,mBAAmB,UAAU,EACjD,OAAO,CAAC,MAAM,IAAI,EACnB,CAAC"}

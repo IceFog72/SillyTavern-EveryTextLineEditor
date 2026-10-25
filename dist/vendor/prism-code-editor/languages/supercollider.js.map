@@ -1,0 +1,1 @@
+{"version":3,"file":"supercollider.js","names":[],"sources":["../../src/languages/supercollider.ts"],"sourcesContent":["import { languageMap } from \"..\"\r\nimport { bracketIndenting } from \"./shared\"\r\n\r\nlanguageMap.sclang = languageMap.supercollider = bracketIndenting()\r\n"],"mappings":";;;AAGA,YAAY,SAAS,YAAY,gBAAgB,iBAAiB"}
