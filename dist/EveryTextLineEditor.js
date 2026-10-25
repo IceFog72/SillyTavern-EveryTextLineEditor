@@ -77,6 +77,8 @@ const yamlToJson = (yaml) => {
         return yaml;
     }
 };
+// Same id is not enough: Current Card ids are shared by every character.
+const isSameSourceIdentity = (a, b) => a.id === b.id && a.group === b.group && (a.identity ?? '') === (b.identity ?? '');
 let monacoLoadPromise = null;
 let typoLoadPromise = null;
 let englishDictionaryPromise = null;
@@ -199,6 +201,7 @@ export class EveryTextLineEditor {
     panelResizeObserver;
     lifecycle;
     diffScrollBindings;
+    detachedDraftSource;
     constructor() {
         this.sources = [];
         this.selectedSource = null;
@@ -230,6 +233,7 @@ export class EveryTextLineEditor {
         this.historyStore = new HistoryStore();
         this.lifecycle = new AbortController();
         this.diffScrollBindings = null;
+        this.detachedDraftSource = null;
         this.sourceLanguages = getStoredSourceLanguages();
         this.suppressEditorChange = false;
         this.trackedSourceGroups = new Set(getTrackedSourceGroups());
@@ -564,17 +568,22 @@ export class EveryTextLineEditor {
                     await this.refreshHistory();
                 },
                 onSelectCategory: async (groupName) => {
+                    const previousGroup = this.selectedHistoryGroup;
                     this.selectedHistoryGroup = groupName;
                     const firstSource = this.sources.find(s => s.group === groupName && !s.placeholder);
                     if (firstSource && (!this.selectedSource || this.selectedSource.group !== groupName)) {
-                        await this.selectSource(firstSource.id, { force: true });
+                        await this.selectSource(firstSource.id);
+                        if (this.selectedSource?.group !== groupName) {
+                            this.selectedHistoryGroup = previousGroup;
+                            await this.refreshHistory();
+                        }
                     }
                     else {
                         await this.refreshHistory();
                     }
                 },
                 onSelectSource: async (sourceId) => {
-                    await this.selectSource(sourceId, { force: true });
+                    await this.selectSource(sourceId);
                 },
                 onCompareChanged: async (change) => {
                     await this.compareChangedSource(change);
@@ -1333,8 +1342,18 @@ export class EveryTextLineEditor {
         this.renderTree();
         this.updateStatusBar();
         const visibleSources = this.getTrackedSources();
-        if (previousId && visibleSources.some(source => source.id === previousId)) {
-            await this.selectSource(previousId, { force: true });
+        const nextSource = previousId ? visibleSources.find(source => source.id === previousId) : undefined;
+        const current = this.selectedSource;
+        if (this.dirty && current) {
+            // A refresh never drops an unsaved draft.
+            if (nextSource && isSameSourceIdentity(current, nextSource))
+                this.rebindSelectedSource(nextSource);
+            else
+                this.keepDetachedDraft(current);
+            return;
+        }
+        if (nextSource) {
+            await this.selectSource(nextSource.id, { force: true });
         }
         else if (visibleSources.length && (!this.selectedSource || !visibleSources.some(source => source.id === this.selectedSource?.id))) {
             await this.selectSource(visibleSources[0].id, { force: true });
@@ -1396,7 +1415,7 @@ export class EveryTextLineEditor {
         setPromptInspectorSnapshot(value);
         await this.open();
         const sourceId = getPromptInspectorSourceId();
-        await this.selectSource(sourceId, { force: true });
+        await this.selectSource(sourceId, { force: this.selectedSource?.id === sourceId });
         if (this.selectedSource?.id !== sourceId)
             return;
         let previousValue = getPromptInspectorPreviousValue();
@@ -1544,7 +1563,7 @@ export class EveryTextLineEditor {
             return;
         const firstSelectable = visibleSources.find(source => source.selectable !== false);
         if (firstSelectable) {
-            await this.selectSource(firstSelectable.id, { force: true });
+            await this.selectSource(firstSelectable.id);
         }
         else {
             this.clearSelectedSource('No source categories selected', 'Click Control to choose which categories stay in this list.');
@@ -1631,6 +1650,27 @@ export class EveryTextLineEditor {
             globalThis.toastr?.error?.('Failed to toggle prompt. See console for details.');
         }
     }
+    // Point at the refreshed TextSource object without touching the editor buffer.
+    rebindSelectedSource(source) {
+        const baseline = source.read();
+        if (baseline !== this.selectedSourceBaseline)
+            this.selectedSourceChanged = true;
+        this.selectedSource = source;
+        this.selectedSourceBaseline = baseline;
+        this.updateHeader();
+        this.updateDirty(this.isCurrentEditorDirty());
+        this.renderDiff();
+        this.renderTree();
+    }
+    // The selected source vanished or now points at a different object; keep editing the original.
+    keepDetachedDraft(source) {
+        if (this.detachedDraftSource === source)
+            return;
+        this.detachedDraftSource = source;
+        this.selectedSourceChanged = true;
+        this.updateDirty(true);
+        globalThis.toastr?.warning?.(`"${source.label}" changed outside the editor. Apply saves your draft to the original, Revert discards it.`);
+    }
     async selectSource(id, { force = false } = {}) {
         if (!force && this.selectedSource?.id === id)
             return;
@@ -1651,6 +1691,7 @@ export class EveryTextLineEditor {
         if (!source || source.selectable === false)
             return;
         this.selectedSource = source;
+        this.detachedDraftSource = null;
         if (this.historyCommit?.sourceId !== source.id)
             this.historyCommit = undefined;
         setSetting(STORAGE.selectedSource, source.id);
@@ -1838,7 +1879,7 @@ export class EveryTextLineEditor {
     async refreshSelectedSourceBaseline() {
         if (!this.selectedSource || this.historyCommit?.sourceId === this.selectedSource.id)
             return;
-        if (this.sourceWatchInFlight)
+        if (this.sourceWatchInFlight || this.selectedSource === this.detachedDraftSource)
             return;
         const watchedSource = this.selectedSource;
         let liveValue;
@@ -2484,6 +2525,10 @@ export class EveryTextLineEditor {
         this.setEditorValue(this.selectedSourceBaseline);
         this.updateDirty(false);
         this.renderDiff();
+        if (this.detachedDraftSource) {
+            this.detachedDraftSource = null;
+            this.refreshSources(true).catch((error) => console.warn(`[${NAME}] Failed to refresh sources after revert`, error));
+        }
     }
     toggleDiff() {
         this.diffOpen = !this.diffOpen;

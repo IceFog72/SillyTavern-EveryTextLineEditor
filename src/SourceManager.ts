@@ -620,7 +620,10 @@ const makeCharacterCardSources = (character: Record<string, any>, {
     const displayGroup = sourceGroup === 'Current Card' ? cardName : undefined;
     const sourceIdPrefix = idPrefix ?? `character-card:${avatar}`;
     const refresh = async () => {
-        activeCharacter = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
+        const next = refreshCharacter ? await refreshCharacter() : await getFreshCharacter(avatar);
+        // Current Card ids are shared by every character; never let a source follow a different one.
+        if (String(next.avatar ?? avatar) !== avatar) throw new Error(`Character "${cardName}" is no longer current.`);
+        activeCharacter = next;
         return activeCharacter;
     };
     const save = async () => {
@@ -643,6 +646,7 @@ const makeCharacterCardSources = (character: Record<string, any>, {
         save,
         meta: `Character card: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
         displayGroup,
+        identity: avatar,
     }));
 
     sources.push({
@@ -663,6 +667,7 @@ const makeCharacterCardSources = (character: Record<string, any>, {
         save,
         meta: `Character card JSON: ${sourceGroup === 'Current Card' ? `current (${cardName})` : avatar}`,
         displayGroup,
+        identity: avatar,
     });
 
     return sources;

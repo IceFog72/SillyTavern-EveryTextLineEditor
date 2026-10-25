@@ -63,6 +63,7 @@ export declare class EveryTextLineEditor {
     panelResizeObserver: ResizeObserver | null;
     lifecycle: AbortController;
     diffScrollBindings: AbortController | null;
+    detachedDraftSource: TextSource | null;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -116,6 +117,8 @@ export declare class EveryTextLineEditor {
     guessLanguageForSource(source: TextSource): Language;
     setSourceLanguage(source: TextSource, lang: Language): void;
     toggleSource(source: any): Promise<void>;
+    rebindSelectedSource(source: TextSource): void;
+    keepDetachedDraft(source: TextSource): void;
     selectSource(id: any, { force }?: {
         force?: boolean;
     }): Promise<void>;
