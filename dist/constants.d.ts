@@ -13,6 +13,7 @@ export declare const STORAGE: {
     sourceLanguages: string;
     trackedSources: string;
     ignoreFullJsonHistory: string;
+    autoCollapseSidebar: string;
     promptInspectorEnabled: string;
     promptInspectorCurrent: string;
     promptInspectorPrevious: string;

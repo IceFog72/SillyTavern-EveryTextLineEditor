@@ -4,6 +4,7 @@ import { extension_settings } from '../../../../extensions.js';
 import { EveryTextLineEditor } from './EveryTextLineEditor.js';
 import { NAME, STORAGE } from './constants.js';
 import { HistoryStore } from './HistoryStore.js';
+import { clearSettings } from './settings.js';
 let app = null;
 const init = (force = false) => {
     if (app)
@@ -22,6 +23,7 @@ const destroy = () => {
 const cleanLocalData = async () => {
     destroy();
     Object.values(STORAGE).forEach(key => localStorage.removeItem(key));
+    clearSettings();
     await new HistoryStore().clearAll();
 };
 export function onActivate() {

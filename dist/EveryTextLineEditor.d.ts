@@ -60,6 +60,7 @@ export declare class EveryTextLineEditor {
     _popupPreviousParent: Element | null;
     _popupEscHandler: ((e: KeyboardEvent) => void) | null;
     syncWandToggleButton?: () => void;
+    panelResizeObserver: ResizeObserver | null;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
@@ -125,10 +126,11 @@ export declare class EveryTextLineEditor {
     startSourceWatcher(): void;
     stopSourceWatcher(): void;
     refreshSelectedSourceBaseline(): Promise<void>;
-    setWordWrap(enabled: any): void;
+    setWordWrap(enabled: boolean): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
     setIgnoreFullJsonHistory(enabled: boolean): void;
+    setAutoCollapseSidebar(enabled: boolean): void;
     isSourceIgnoredForHistory(source?: TextSource | null): boolean;
     isMonacoMinimapEffectivelyEnabled(): boolean;
     applyMonacoMinimapOption(): void;
@@ -147,6 +149,33 @@ export declare class EveryTextLineEditor {
     shouldIgnoreSpellWord(word: string): boolean;
     cycleIndentMode(): void;
     setIndentMode(mode: IndentMode): void;
+    getPlainTextLanguage(): {
+        readonly id: "markdown";
+        readonly label: ".md";
+    } | {
+        readonly id: "text";
+        readonly label: "text";
+    };
+    setPrismEditorLanguage(editor: PrismEditorLike | null, lang: Language): boolean;
+    setActiveLanguage(lang: Language, { persist, updateUi }?: {
+        persist?: boolean;
+        updateUi?: boolean;
+    }): {
+        readonly id: "markdown";
+        readonly label: ".md";
+    } | {
+        readonly id: "json";
+        readonly label: ".json";
+    } | {
+        readonly id: "yaml";
+        readonly label: ".yaml";
+    } | {
+        readonly id: "css";
+        readonly label: ".css";
+    } | {
+        readonly id: "text";
+        readonly label: "text";
+    };
     setLanguage(lang: Language): void;
     toggleLanguageMenu(): void;
     openLanguageMenu(): void;

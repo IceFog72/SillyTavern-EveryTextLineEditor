@@ -19,6 +19,7 @@ import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCha
 import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
+import { getSetting, setSetting } from './settings.js';
 
 const GROUP_ORDER: Record<string, number> = {
     'Chat Completion Prompts': 10,
@@ -40,14 +41,14 @@ const JSON_SOURCE_ORDER = 1_000_000;
 
 export const getCollapsedGroups = (): Set<string> => {
     try {
-        return new Set(JSON.parse(localStorage.getItem(STORAGE.collapsedGroups) || '[]'));
+        return new Set(getSetting<string[]>(STORAGE.collapsedGroups, []));
     } catch {
         return new Set();
     }
 };
 
 export const setCollapsedGroups = (groups: Set<string>) => {
-    localStorage.setItem(STORAGE.collapsedGroups, JSON.stringify([...groups]));
+    setSetting(STORAGE.collapsedGroups, [...groups]);
 };
 
 const splitLines = (text: unknown): string[] => String(text ?? '').split('\n');
@@ -89,15 +90,15 @@ const replaceObjectContents = (target: Record<string, any>, source: Record<strin
 
 const normalizePromptContent = (value: unknown): string => String(value ?? '').trim().replace(/\r\n/g, '\n');
 
-const getPromptInspectorCurrent = () => localStorage.getItem(STORAGE.promptInspectorCurrent) ?? '';
-const getPromptInspectorPrevious = () => localStorage.getItem(STORAGE.promptInspectorPrevious) ?? '';
-const isPromptInspectorEnabled = () => localStorage.getItem(STORAGE.promptInspectorEnabled) === 'true';
+const getPromptInspectorCurrent = () => getSetting<string>(STORAGE.promptInspectorCurrent, '');
+const getPromptInspectorPrevious = () => getSetting<string>(STORAGE.promptInspectorPrevious, '');
+const isPromptInspectorEnabled = () => getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
 
 export const setPromptInspectorSnapshot = (value: string) => {
     const current = getPromptInspectorCurrent();
-    if (current && current !== value) localStorage.setItem(STORAGE.promptInspectorPrevious, current);
-    localStorage.setItem(STORAGE.promptInspectorCurrent, value);
-    localStorage.setItem(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
+    if (current && current !== value) setSetting(STORAGE.promptInspectorPrevious, current);
+    setSetting(STORAGE.promptInspectorCurrent, value);
+    setSetting(STORAGE.promptInspectorUpdatedAt, String(Date.now()));
 };
 
 export const getPromptInspectorSourceId = () => 'prompt-inspector:last-result';
@@ -1156,10 +1157,10 @@ export const getSources = async (): Promise<TextSource[]> => {
         },
         save: () => {},
         toggle: () => {
-            localStorage.setItem(STORAGE.promptInspectorEnabled, String(!isPromptInspectorEnabled()));
+            setSetting(STORAGE.promptInspectorEnabled, !isPromptInspectorEnabled());
         },
-        meta: localStorage.getItem(STORAGE.promptInspectorUpdatedAt)
-            ? `Last inspected prompt: ${new Date(Number(localStorage.getItem(STORAGE.promptInspectorUpdatedAt))).toLocaleString()}`
+        meta: getSetting<string>(STORAGE.promptInspectorUpdatedAt, '')
+            ? `Last inspected prompt: ${new Date(Number(getSetting<string>(STORAGE.promptInspectorUpdatedAt, ''))).toLocaleString()}`
             : 'Captures next generation prompt when enabled.',
     });
 

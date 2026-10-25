@@ -15,6 +15,7 @@ export const STORAGE = {
     sourceLanguages: `${NAME}:sourceLanguages`,
     trackedSources: `${NAME}:trackedSources`,
     ignoreFullJsonHistory: `${NAME}:ignoreFullJsonHistory`,
+    autoCollapseSidebar: `${NAME}:autoCollapseSidebar`,
     promptInspectorEnabled: `${NAME}:promptInspectorEnabled`,
     promptInspectorCurrent: `${NAME}:promptInspectorCurrent`,
     promptInspectorPrevious: `${NAME}:promptInspectorPrevious`,

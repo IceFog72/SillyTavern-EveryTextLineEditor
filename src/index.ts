@@ -4,6 +4,7 @@ import { extension_settings } from '../../../../extensions.js';
 import { EveryTextLineEditor } from './EveryTextLineEditor.js';
 import { NAME, STORAGE } from './constants.js';
 import { HistoryStore } from './HistoryStore.js';
+import { clearSettings } from './settings.js';
 
 declare global {
     interface Window {
@@ -30,6 +31,7 @@ const destroy = () => {
 const cleanLocalData = async () => {
     destroy();
     Object.values(STORAGE).forEach(key => localStorage.removeItem(key));
+    clearSettings();
     await new HistoryStore().clearAll();
 };
 
