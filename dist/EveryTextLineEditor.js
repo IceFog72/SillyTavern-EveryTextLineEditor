@@ -197,6 +197,8 @@ export class EveryTextLineEditor {
     _popupEscHandler;
     syncWandToggleButton;
     panelResizeObserver;
+    lifecycle;
+    diffScrollBindings;
     constructor() {
         this.sources = [];
         this.selectedSource = null;
@@ -226,6 +228,8 @@ export class EveryTextLineEditor {
         this.selectedSidebarTab = 'sources';
         this.selectedHistoryGroup = '';
         this.historyStore = new HistoryStore();
+        this.lifecycle = new AbortController();
+        this.diffScrollBindings = null;
         this.sourceLanguages = getStoredSourceLanguages();
         this.suppressEditorChange = false;
         this.trackedSourceGroups = new Set(getTrackedSourceGroups());
@@ -248,6 +252,8 @@ export class EveryTextLineEditor {
         this.startSourceWatcher();
     }
     destroy() {
+        this.lifecycle.abort();
+        this.diffScrollBindings?.abort();
         this.stopSourceWatcher();
         this.stopSourceEventListeners();
         if (this.runtimeSourceRefreshTimer !== null) {
@@ -260,6 +266,9 @@ export class EveryTextLineEditor {
         this.panelResizeObserver = null;
         this.editor?.dispose?.();
         this.oldEditor?.dispose?.();
+        if (this.dom.root?.classList.contains('etle--popup'))
+            this.toggleFullscreen();
+        this.dirty = false;
         this.dom.drawer?.remove();
         this.dom.wandButton?.remove();
         this.sources = [];
@@ -307,7 +316,7 @@ export class EveryTextLineEditor {
             document.body.append(drawer);
             toggle.addEventListener('click', () => this.toggleDrawerClasses());
         }
-        document.addEventListener('click', (event) => this.handleDocumentClick(event), { capture: true });
+        document.addEventListener('click', (event) => this.handleDocumentClick(event), { capture: true, signal: this.lifecycle.signal });
     }
     handleDrawerToggle(event) {
         if (!this.dirty || !this.dom.root.classList.contains('openDrawer'))
@@ -1085,10 +1094,12 @@ export class EveryTextLineEditor {
         editor.textarea.addEventListener('click', syncCaret);
         editor.textarea.addEventListener('select', syncCaret);
         editor.textarea.addEventListener('input', syncCaret);
+        const documentListeners = new AbortController();
         document.addEventListener('selectionchange', () => {
             if (document.activeElement === editor.textarea)
                 syncCaret();
-        });
+        }, { signal: documentListeners.signal });
+        editor.dispose = () => documentListeners.abort();
         return editor;
     }
     async createMonacoEditor(host, value = '', readOnly = false) {
@@ -1228,6 +1239,9 @@ export class EveryTextLineEditor {
     bindDiffScrollSync() {
         if (!this.editor || !this.oldEditor || !this.dom.masterScrollbar)
             return;
+        this.diffScrollBindings?.abort();
+        this.diffScrollBindings = new AbortController();
+        const { signal } = this.diffScrollBindings;
         const syncFromMaster = () => {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off' || this.isSyncingScroll)
                 return;
@@ -1246,17 +1260,17 @@ export class EveryTextLineEditor {
             if (this.dom.masterScrollbar.scrollTop === before)
                 this.scrollDiffPanesBy(event.deltaY);
         };
-        this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true });
-        this.editor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
-        this.oldEditor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false });
+        this.dom.masterScrollbar.addEventListener('scroll', syncFromMaster, { passive: true, signal });
+        this.editor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false, signal });
+        this.oldEditor.scrollContainer.addEventListener('wheel', handleWheel, { passive: false, signal });
         const syncFromEditor = (from, to) => {
             if (!this.diffOpen || this.scrollSyncMode.id === 'off' || this.isSyncingScroll)
                 return;
             this.applyScrollSync(from, to);
             this.dom.masterScrollbar.scrollTop = from.scrollTop;
         };
-        this.editor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true });
-        this.oldEditor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true });
+        this.editor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.editor.scrollContainer, this.oldEditor.scrollContainer), { passive: true, signal });
+        this.oldEditor.scrollContainer.addEventListener('scroll', () => syncFromEditor(this.oldEditor.scrollContainer, this.editor.scrollContainer), { passive: true, signal });
     }
     scrollDiffPanesBy(deltaY) {
         if (!this.editor || !this.oldEditor || this.isSyncingScroll)

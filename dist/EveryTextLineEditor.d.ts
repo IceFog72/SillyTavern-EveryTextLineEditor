@@ -61,6 +61,8 @@ export declare class EveryTextLineEditor {
     _popupEscHandler: ((e: KeyboardEvent) => void) | null;
     syncWandToggleButton?: () => void;
     panelResizeObserver: ResizeObserver | null;
+    lifecycle: AbortController;
+    diffScrollBindings: AbortController | null;
     constructor();
     inject(): Promise<void>;
     destroy(): void;
