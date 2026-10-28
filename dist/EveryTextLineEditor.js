@@ -1618,6 +1618,8 @@ export class EveryTextLineEditor {
             const format = getSetting('promptInspectorFormat', 'yaml');
             return format === 'yaml' ? yamlLanguage : jsonLanguage;
         }
+        if (source.group.startsWith('Data Bank') && !/\.(md|markdown|json|css|ya?ml)$/.test(label))
+            return textLanguage;
         if (source.group.includes('Connection Profiles'))
             return jsonLanguage;
         if (source.group.includes('Character Card') && label.includes('json'))

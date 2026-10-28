@@ -13,9 +13,13 @@ import { loadWorldInfo, reloadEditor, saveWorldInfo, world_names } from '../../.
 // @ts-ignore
 import { textgenerationwebui_preset_names, textgenerationwebui_settings } from '../../../../textgen-settings.js';
 // @ts-ignore
-import { extension_settings } from '../../../../extensions.js';
+import { extension_settings, saveMetadataDebounced } from '../../../../extensions.js';
 // @ts-ignore
-import { characters, getCharacters, getOneCharacter, getRequestHeaders, printCharactersDebounced, saveSettingsDebounced, this_chid } from '../../../../../script.js';
+import { characters, chat_metadata, getCharacters, getOneCharacter, getRequestHeaders, printCharactersDebounced, saveSettingsDebounced, this_chid } from '../../../../../script.js';
+// @ts-ignore
+import { uploadFileAttachment } from '../../../../chats.js';
+// @ts-ignore
+import { convertTextToBase64 } from '../../../../utils.js';
 import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
@@ -35,6 +39,7 @@ const GROUP_ORDER: Record<string, number> = {
     'Personas': 110,
     'Prompt Inspector': 115,
     'Character Cards': 120,
+    'Data Bank': 130,
 };
 
 const JSON_SOURCE_ORDER = 1_000_000;
@@ -673,6 +678,86 @@ const makeCharacterCardSources = (character: Record<string, any>, {
     return sources;
 };
 
+type DataBankAttachment = { url: string; name?: string; size?: number; created?: number };
+
+// Attachment text by file URL. Filled once per file, updated on save and by readFresh.
+const dataBankText = new Map<string, string>();
+
+const fetchDataBankText = async (url: string, fresh: boolean): Promise<string> => {
+    const response = await fetch(url, { headers: getRequestHeaders(), cache: fresh ? 'no-store' : 'default' });
+    if (!response.ok) throw new Error(`Attachment could not be read (${response.status}).`);
+    const text = await response.text();
+    dataBankText.set(url, text);
+    return text;
+};
+
+const makeDataBankSource = (attachment: DataBankAttachment, {
+    group,
+    scope,
+    persist,
+}: {
+    group: string;
+    scope: string;
+    persist: () => void;
+}): TextSource => {
+    const url = String(attachment.url);
+    const name = String(attachment.name ?? url.split('/').pop() ?? url);
+    const disabled = Array.isArray(extension_settings.disabled_attachments) && extension_settings.disabled_attachments.includes(url);
+    let text = dataBankText.get(url) ?? '';
+
+    return {
+        id: `data-bank:${scope}:${url}`,
+        label: name,
+        group,
+        groupOrder: GROUP_ORDER['Data Bank'],
+        readonly: false,
+        read: () => text,
+        readFresh: async () => (text = await fetchDataBankText(url, true)),
+        write: (value) => {
+            text = value;
+        },
+        save: async () => {
+            if (!text) throw new Error('Empty files cannot be saved to the Data Bank.');
+            // Same file name overwrites in place, so the attachment URL stays valid.
+            const uploaded = await uploadFileAttachment(url.split('/').pop(), convertTextToBase64(text));
+            if (!uploaded) throw new Error(`Attachment "${name}" could not be saved.`);
+            dataBankText.set(url, text);
+            attachment.size = new TextEncoder().encode(text).length;
+            persist();
+        },
+        meta: `Data Bank attachment${disabled ? ' (disabled)' : ''}: ${name}`,
+    };
+};
+
+const getDataBankSources = async (): Promise<TextSource[]> => {
+    const entries: Array<{ attachment: DataBankAttachment; group: string; scope: string; persist: () => void }> = [];
+    const collect = (list: unknown, group: string, scope: string, persist: () => void) => {
+        if (!Array.isArray(list)) return;
+        for (const attachment of list) {
+            if (attachment?.url) entries.push({ attachment, group, scope, persist });
+        }
+    };
+
+    collect(extension_settings.attachments, 'Data Bank: Global', 'global', saveSettingsDebounced);
+    collect(chat_metadata?.attachments, 'Data Bank: Chat', 'chat', saveMetadataDebounced);
+    // Read the whole per-character map: SillyTavern only exposes the selected character, so group chats show none.
+    for (const [avatar, list] of Object.entries<unknown>(extension_settings.character_attachments ?? {})) {
+        const name = String(getCharacterByAvatar(avatar)?.name ?? avatar);
+        collect(list, `Data Bank (Character): ${name}`, `character:${avatar}`, saveSettingsDebounced);
+    }
+
+    const missing = [...new Set(entries.map(entry => String(entry.attachment.url)).filter(url => !dataBankText.has(url)))];
+    for (let i = 0; i < missing.length; i += 6) {
+        await Promise.all(missing.slice(i, i + 6).map(url => fetchDataBankText(url, false).catch((error) => {
+            console.warn(`[${NAME}] Could not read attachment "${url}"`, error);
+        })));
+    }
+
+    return entries
+        .filter(entry => dataBankText.has(String(entry.attachment.url)))
+        .map(entry => makeDataBankSource(entry.attachment, entry));
+};
+
 const makeCurrentCharacterPlaceholderSource = (): TextSource => ({
     id: 'current-character-card:placeholder',
     label: 'No current character selected',
@@ -1230,6 +1315,8 @@ export const getSources = async (): Promise<TextSource[]> => {
             sources.push(...makeCharacterCardSources(character));
         }
     }
+
+    sources.push(...await getDataBankSources());
 
     if (Array.isArray(world_names) && world_names.length) {
         for (const worldName of world_names) {
