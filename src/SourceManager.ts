@@ -19,7 +19,7 @@ import { characters, chat_metadata, getCharacters, getOneCharacter, getRequestHe
 // @ts-ignore
 import { uploadFileAttachment } from '../../../../chats.js';
 // @ts-ignore
-import { convertTextToBase64 } from '../../../../utils.js';
+import { convertTextToBase64, getStringHash } from '../../../../utils.js';
 import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
 import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
@@ -680,15 +680,13 @@ const makeCharacterCardSources = (character: Record<string, any>, {
 
 type DataBankAttachment = { url: string; name?: string; size?: number; created?: number };
 
-// Attachment text by file URL. Filled once per file, updated on save and by readFresh.
-const dataBankText = new Map<string, string>();
+// Share saved state across source refreshes and attachments that reference the same URL.
+const dataBankText = new Map<string, { text: string; revision: number; saving: boolean; needsInvalidation: boolean }>();
 
-const fetchDataBankText = async (url: string, fresh: boolean): Promise<string> => {
-    const response = await fetch(url, { headers: getRequestHeaders(), cache: fresh ? 'no-store' : 'default' });
+const fetchDataBankText = async (url: string, cache: RequestCache = 'no-store'): Promise<string> => {
+    const response = await fetch(url, { headers: getRequestHeaders(), cache });
     if (!response.ok) throw new Error(`Attachment could not be read (${response.status}).`);
-    const text = await response.text();
-    dataBankText.set(url, text);
-    return text;
+    return response.text();
 };
 
 const makeDataBankSource = (attachment: DataBankAttachment, {
@@ -703,7 +701,8 @@ const makeDataBankSource = (attachment: DataBankAttachment, {
     const url = String(attachment.url);
     const name = String(attachment.name ?? url.split('/').pop() ?? url);
     const disabled = Array.isArray(extension_settings.disabled_attachments) && extension_settings.disabled_attachments.includes(url);
-    let text = dataBankText.get(url) ?? '';
+    const file = dataBankText.get(url)!;
+    let draft: string | undefined;
 
     return {
         id: `data-bank:${scope}:${url}`,
@@ -711,19 +710,49 @@ const makeDataBankSource = (attachment: DataBankAttachment, {
         group,
         groupOrder: GROUP_ORDER['Data Bank'],
         readonly: false,
-        read: () => text,
-        readFresh: async () => (text = await fetchDataBankText(url, true)),
+        read: () => file.text,
+        readFresh: async () => {
+            // Keep a failed partial save dirty in the editor so Apply can retry it.
+            if (file.saving || file.needsInvalidation) return file.text;
+            const revision = file.revision;
+            const text = await fetchDataBankText(url);
+            // A response started before a save must not replace its result.
+            if (revision === file.revision && !file.saving) file.text = text;
+            return file.text;
+        },
         write: (value) => {
-            text = value;
+            draft = value;
         },
         save: async () => {
+            if (file.saving) throw new Error('This Data Bank file is already being saved.');
+            const text = draft ?? file.text;
             if (!text) throw new Error('Empty files cannot be saved to the Data Bank.');
-            // Same file name overwrites in place, so the attachment URL stays valid.
-            const uploaded = await uploadFileAttachment(url.split('/').pop(), convertTextToBase64(text));
-            if (!uploaded) throw new Error(`Attachment "${name}" could not be saved.`);
-            dataBankText.set(url, text);
-            attachment.size = new TextEncoder().encode(text).length;
-            persist();
+            file.saving = true;
+            file.revision++;
+            try {
+                // Keep the URL and source/history identity stable.
+                const uploaded = await uploadFileAttachment(url.split('/').pop(), convertTextToBase64(text));
+                if (!uploaded) throw new Error(`Attachment "${name}" could not be saved.`);
+                file.needsInvalidation = true;
+                attachment.size = new TextEncoder().encode(text).length;
+                persist();
+
+                // SillyTavern reads files with force-cache and keys vectors by URL.
+                // Refresh that cache before allowing the file to be ingested again.
+                await fetchDataBankText(url, 'reload');
+                const response = await fetch('/api/vector/purge', {
+                    method: 'POST',
+                    headers: getRequestHeaders(),
+                    body: JSON.stringify({ collectionId: `file_${getStringHash(url)}` }),
+                });
+                if (!response.ok) throw new Error(`Attachment "${name}" was saved, but its vectors could not be cleared (${response.status}). Retry saving.`);
+                file.text = text;
+                file.needsInvalidation = false;
+                if (draft === text) draft = undefined;
+            } finally {
+                file.revision++;
+                file.saving = false;
+            }
         },
         meta: `Data Bank attachment${disabled ? ' (disabled)' : ''}: ${name}`,
     };
@@ -748,9 +777,14 @@ const getDataBankSources = async (): Promise<TextSource[]> => {
 
     const missing = [...new Set(entries.map(entry => String(entry.attachment.url)).filter(url => !dataBankText.has(url)))];
     for (let i = 0; i < missing.length; i += 6) {
-        await Promise.all(missing.slice(i, i + 6).map(url => fetchDataBankText(url, false).catch((error) => {
-            console.warn(`[${NAME}] Could not read attachment "${url}"`, error);
-        })));
+        await Promise.all(missing.slice(i, i + 6).map(async (url) => {
+            try {
+                const text = await fetchDataBankText(url, 'default');
+                if (!dataBankText.has(url)) dataBankText.set(url, { text, revision: 0, saving: false, needsInvalidation: false });
+            } catch (error) {
+                console.warn(`[${NAME}] Could not read attachment "${url}"`, error);
+            }
+        }));
     }
 
     return entries
