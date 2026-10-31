@@ -18,6 +18,13 @@
     overflow: hidden;
 }
 
+/* ProbablyTooManyTabs shows docked drawers even with .closedDrawer; its pane sets the height. */
+.ptmt-pane-grid #etle--panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
 /* Popup overlay mode — panel physically moved to document.body */
 .etle--backdrop {
     position: fixed;
