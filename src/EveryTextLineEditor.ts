@@ -3440,8 +3440,11 @@ export class EveryTextLineEditor {
             ?? document.querySelector<HTMLElement>('.ptmt-panel[data-source-id="etle--panel"]');
         const pid = panel?.dataset?.panelId;
         if (!panel || !pid) return false;
-        const isClosed = panel.classList.contains('hidden') || Boolean(panel.closest('.view-collapsed'));
+        const isClosed = panel.classList.contains('hidden')
+            || panel.classList.contains('collapsed')
+            || Boolean(panel.closest('.view-collapsed'));
         if (isClosed) {
+            ptmt?.setTabCollapsed?.(pid, false);
             if (typeof ptmt?.openTab === 'function') {
                 ptmt.openTab(pid);
             } else {
@@ -3450,6 +3453,23 @@ export class EveryTextLineEditor {
             }
         }
         return true;
+    }
+
+    closeInPtmtIfDocked(): boolean {
+        const ptmt = (globalThis as any).ptmtTabs;
+        const panel = this.dom.root?.closest?.<HTMLElement>('.ptmt-panel')
+            ?? document.querySelector<HTMLElement>('.ptmt-panel[data-source-id="etle--panel"]');
+        const pid = panel?.dataset?.panelId;
+        if (!panel || !pid) return false;
+        if (typeof ptmt?.closeTabById === 'function') {
+            ptmt.closeTabById(pid);
+            return true;
+        }
+        if (typeof ptmt?.setTabCollapsed === 'function') {
+            ptmt.setTabCollapsed(pid, true);
+            return true;
+        }
+        return false;
     }
 
     async open() {
@@ -3501,7 +3521,10 @@ export class EveryTextLineEditor {
                 this.revert();
             }
         }
-        if (this.dom.root.classList.contains('openDrawer')) {
+        if (this.dom.root?.classList.contains('etle--popup')) {
+            this.toggleFullscreen();
+        }
+        if (!this.closeInPtmtIfDocked() && this.dom.root.classList.contains('openDrawer')) {
             this.dom.toggle.click();
         }
     }

@@ -268,6 +268,7 @@ export declare class EveryTextLineEditor {
     layoutMonacoDiff(focus?: boolean): void;
     updateDirty(isDirty: any): void;
     openInPtmtIfDocked(): boolean;
+    closeInPtmtIfDocked(): boolean;
     open(): Promise<void>;
     openForFieldId(fieldId: string, sourceField?: HTMLTextAreaElement): Promise<void>;
     close(): Promise<void>;
