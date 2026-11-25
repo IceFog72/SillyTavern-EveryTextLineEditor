@@ -363,12 +363,12 @@ test('status bars keep Open in ETLE, per-box controls, settings, and disable thr
     const bar = () => field.nextElementSibling.querySelectorAll('.etle--inlineStatusBar')[0];
     const control = setting => bar().children.find(child => child.dataset.inlineSetting === setting);
     assert.deepEqual(bar().children.map(child => child.dataset.inlineSetting || 'spacer'), [
-        'disable', 'open', 'settings', 'spacer', 'wordWrap', 'lineNumbers', 'spellCheck', 'language', 'engine',
+        'disable', 'open', 'settings', 'saveState', 'spacer', 'wordWrap', 'lineNumbers', 'spellCheck', 'language', 'engine',
     ]);
     ltAvailable = true;
     await replacer.updateOptions();
     assert.deepEqual(bar().children.map(child => child.dataset.inlineSetting || 'spacer'), [
-        'disable', 'open', 'settings', 'spacer', 'wordWrap', 'lineNumbers', 'spellCheck', 'languageTool', 'language', 'engine',
+        'disable', 'open', 'settings', 'saveState', 'spacer', 'wordWrap', 'lineNumbers', 'spellCheck', 'languageTool', 'language', 'engine',
     ]);
     assert.equal(control('wordWrap').children[0].classList.contains('fa-align-left'), true);
     assert.equal(control('lineNumbers').children[0].classList.contains('fa-list-ol'), true);

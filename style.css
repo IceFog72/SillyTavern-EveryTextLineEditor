@@ -865,8 +865,16 @@
     color: var(--SmartThemeBodyColor);
 }
 
+.etle--dirtyStatus.etle--statusSaved {
+    color: #56d364;
+    opacity: 0.85;
+    cursor: default;
+}
+
 .etle--dirtyStatus.etle--statusDirty {
-    color: #ffcc66;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.22);
+    outline: 1px solid rgba(245, 158, 11, 0.7);
 }
 
 .etle--dirtyStatus.etle--statusSourceChanged {
@@ -1805,6 +1813,18 @@
 .etle--inlineStatusBar .etle--statusActive,
 .etle--inlineStatusBar button:hover {
     background: color-mix(in srgb, var(--SmartThemeQuoteColor, #8ab4f8) 24%, transparent);
+}
+
+.etle--inlineStatusBar .etle--inlineSaveSaved {
+    color: #56d364;
+    opacity: 0.85;
+}
+
+.etle--inlineStatusBar .etle--inlineSavePending {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.22);
+    outline: 1px solid rgba(245, 158, 11, 0.7);
+    opacity: 1;
 }
 
 .etle--inlineStatusBar :focus-visible,

@@ -45,6 +45,7 @@ export interface TextFieldReplacerOptions {
     onFieldConfigsChange?: (configs: TextFieldConfigs) => void;
     onOpenField?: (textarea: HTMLTextAreaElement) => void;
     onOpenSettings?: (key: string) => void;
+    onFieldEdited?: (textarea: HTMLTextAreaElement) => void;
     getIndentMode: () => IndentMode;
     getSpellCheck: () => boolean;
     getMonacoMinimap: () => boolean;
@@ -121,6 +122,8 @@ export declare class TextFieldReplacer {
     private isElementVisible;
     private attach;
     private renderStatusBar;
+    private updateSaveIndicator;
+    private commitEntry;
     private evictMonacoIfNeeded;
     private showNativeTextarea;
     private mountEditor;

@@ -55,6 +55,7 @@ export interface TextFieldReplacerOptions {
     onFieldConfigsChange?: (configs: TextFieldConfigs) => void;
     onOpenField?: (textarea: HTMLTextAreaElement) => void;
     onOpenSettings?: (key: string) => void;
+    onFieldEdited?: (textarea: HTMLTextAreaElement) => void;
     getIndentMode: () => IndentMode;
     getSpellCheck: () => boolean;
     getMonacoMinimap: () => boolean;
@@ -71,6 +72,7 @@ interface ManagedEntry {
     host: HTMLDivElement;
     content: HTMLDivElement;
     statusBar: HTMLElement;
+    saveButton: HTMLButtonElement | null;
     editor: InlineEditorInstance | null;
     mountedEngineId: string | null;
     requestedEngineId: string | null;
@@ -730,6 +732,7 @@ export class TextFieldReplacer {
             host,
             content,
             statusBar,
+            saveButton: null,
             editor: null,
             mountedEngineId: null,
             requestedEngineId: null,
@@ -846,6 +849,9 @@ export class TextFieldReplacer {
         button('', 'Disable replacement for this textbox', () => change({ enabled: false }), 'disable', undefined, 'fa-xmark');
         button('', 'Open in ETLE', () => this.options.onOpenField?.(entry.textarea), 'open', undefined, 'fa-up-right-from-square');
         button('', 'All settings for this textbox', () => this.options.onOpenSettings?.(key), 'settings', undefined, 'fa-gear');
+        const saveButton = button('', 'Synced with SillyTavern', () => this.commitEntry(entry), 'saveState', undefined, 'fa-check');
+        entry.saveButton = saveButton;
+        this.updateSaveIndicator(entry);
         const spacer = document.createElement('span');
         spacer.classList.add('etle--inlineStatusSpacer');
         entry.statusBar.append(spacer);
@@ -863,6 +869,30 @@ export class TextFieldReplacer {
         const engineButton = button(effective.engine.label, 'Cycle editor engine for this textbox', () => change({ engine: nextEngine.id }), 'engine');
         engineButton.classList.toggle('etle--statusActive', effective.engine.id !== 'prism');
         if (focusedSetting) entry.statusBar.querySelector<HTMLElement>(`[data-inline-setting="${focusedSetting}"]`)?.focus();
+    }
+
+    private updateSaveIndicator(entry: ManagedEntry): void {
+        const btn = entry.saveButton;
+        if (!btn) return;
+        const pending = entry.dirtySinceFocus;
+        btn.classList.toggle('etle--inlineSavePending', pending);
+        btn.classList.toggle('etle--inlineSaveSaved', !pending);
+        const label = pending ? 'Unsaved changes — click to commit' : 'Synced with SillyTavern';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+    }
+
+    private commitEntry(entry: ManagedEntry): void {
+        if (!this.managed.has(entry.textarea) || !entry.dirtySinceFocus) return;
+        entry.dirtySinceFocus = false;
+        entry.syncingFromEditor = true;
+        try {
+            entry.textarea.dispatchEvent(new Event('change', { bubbles: true }));
+        } finally {
+            entry.syncingFromEditor = false;
+        }
+        this.updateSaveIndicator(entry);
+        this.options.onFieldEdited?.(entry.textarea);
     }
 
     private evictMonacoIfNeeded(target: ManagedEntry): void {
@@ -944,17 +974,12 @@ export class TextFieldReplacer {
                 } finally {
                     entry.syncingFromEditor = false;
                 }
+                this.updateSaveIndicator(entry);
+                this.options.onFieldEdited?.(entry.textarea);
             },
             onBlur: () => {
                 if (entry.generation !== generation || !this.managed.has(entry.textarea)) return;
-                if (!entry.dirtySinceFocus) return;
-                entry.dirtySinceFocus = false;
-                entry.syncingFromEditor = true;
-                try {
-                    entry.textarea.dispatchEvent(new Event('change', { bubbles: true }));
-                } finally {
-                    entry.syncingFromEditor = false;
-                }
+                this.commitEntry(entry);
             },
         };
 

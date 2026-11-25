@@ -145,6 +145,7 @@ export declare class EveryTextLineEditor {
     withSuppressedEditorChange(callback: () => void): void;
     isValueDirty(value: any): boolean;
     isCurrentEditorDirty(): boolean;
+    isPanelVisible(): boolean;
     startSourceWatcher(): void;
     stopSourceWatcher(): void;
     refreshSelectedSourceBaseline(): Promise<void>;

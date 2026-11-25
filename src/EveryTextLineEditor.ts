@@ -344,6 +344,11 @@ export class EveryTextLineEditor {
             onOpenField: textarea => {
                 this.openForFieldId(textarea.id, textarea).catch(error => console.error(`[${NAME}] Failed to open field in editor`, error));
             },
+            onFieldEdited: () => {
+                if (this.isPanelVisible()) {
+                    this.refreshSelectedSourceBaseline().catch(() => {});
+                }
+            },
             getIndentMode: () => this.indentMode,
             getSpellCheck: () => isSpellCheckEnabled(),
             getMonacoMinimap: () => isMonacoMinimapEnabled(),
@@ -1130,9 +1135,13 @@ export class EveryTextLineEditor {
         branchWrapper.append(branch);
         left.append(branchWrapper);
 
-        const dirty = document.createElement('span');
+        const dirty = document.createElement('button');
         this.dom.statusDirty = dirty;
-        dirty.classList.add('etle--statusItem', 'etle--dirtyStatus');
+        dirty.type = 'button';
+        dirty.classList.add('etle--statusButton', 'etle--statusIconButton', 'etle--dirtyStatus', 'fa-solid', 'fa-fw', 'fa-check');
+        dirty.addEventListener('click', () => {
+            if (this.dirty && !this.selectedSource?.readonly) this.apply();
+        });
         left.append(dirty);
 
         const sourceCount = document.createElement('span');
@@ -2243,10 +2252,18 @@ export class EveryTextLineEditor {
         return this.isValueDirty(this.getCurrentEditorValue());
     }
 
+    isPanelVisible(): boolean {
+        if (!this.dom.root?.isConnected) return false;
+        if (this.dom.root.classList.contains('openDrawer')) return true;
+        const ptmtPanel = this.dom.root.closest?.('.ptmt-panel');
+        if (ptmtPanel) return !ptmtPanel.classList.contains('hidden') && !ptmtPanel.closest('.view-collapsed');
+        return false;
+    }
+
     startSourceWatcher() {
         this.stopSourceWatcher();
         this.sourceWatchTimer = window.setInterval(() => {
-            if (document.hidden || !this.dom.root?.classList.contains('openDrawer')) return;
+            if (document.hidden || !this.isPanelVisible()) return;
             this.refreshSelectedSourceBaseline().catch((error) => console.warn(`[${NAME}] Failed to refresh selected source`, error));
         }, 500);
     }
@@ -2283,7 +2300,15 @@ export class EveryTextLineEditor {
             await this.refreshSources(true);
             return;
         }
+        const hadUnsavedDraft = this.dirty;
         this.selectedSourceBaseline = liveValue;
+        if (!hadUnsavedDraft) {
+            // No local draft in ETLE: sync the live SillyTavern edit straight into the editor.
+            this.selectedSourceChanged = false;
+            this.setEditorValue(liveValue);
+            this.updateDirty(false);
+            return;
+        }
         this.selectedSourceChanged = true;
         this.updateDirty(this.isCurrentEditorDirty());
         this.renderDiff();
@@ -2979,11 +3004,16 @@ export class EveryTextLineEditor {
         }
 
         if (this.dom.statusDirty) {
-            this.dom.statusDirty.textContent = this.selectedSourceChanged
-                ? (this.dirty ? 'Source changed; draft differs' : 'Source changed')
-                : this.dirty ? 'Unsaved changes' : 'All changes saved';
+            const label = this.selectedSourceChanged
+                ? (this.dirty ? 'Source changed; draft differs — click to save (Ctrl+S)' : 'Source changed')
+                : this.dirty ? 'Unsaved changes — click to save (Ctrl+S)' : 'All changes saved';
+            this.dom.statusDirty.title = label;
+            this.dom.statusDirty.setAttribute('aria-label', label);
             this.dom.statusDirty.classList.toggle('etle--statusDirty', this.dirty);
             this.dom.statusDirty.classList.toggle('etle--statusSourceChanged', this.selectedSourceChanged);
+            this.dom.statusDirty.classList.toggle('etle--statusSaved', !this.dirty && !this.selectedSourceChanged);
+            this.dom.statusDirty.classList.toggle('fa-arrows-rotate', this.selectedSourceChanged && !this.dirty);
+            this.dom.statusDirty.classList.toggle('fa-check', !this.selectedSourceChanged || this.dirty);
         }
         if (this.dom.statusSourceCount) {
             this.dom.statusSourceCount.textContent = `${this.trackedSourceGroups.size}/${new Set(this.sources.map(source => source.group)).size} categories`;
