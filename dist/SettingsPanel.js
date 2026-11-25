@@ -1,9 +1,5 @@
-import { EDITOR_ENGINES, INDENT_MODES, NAME, STORAGE, SYNC_MODES } from './constants.js';
-import { getSetting } from './settings.js';
-const isSpellCheckEnabled = () => getSetting(STORAGE.spellCheck, false);
-const isMonacoMinimapEnabled = () => getSetting(STORAGE.monacoMinimap, false);
-const isFullJsonHistoryIgnored = () => getSetting(STORAGE.ignoreFullJsonHistory, true);
-const isAutoCollapseSidebarEnabled = () => getSetting(STORAGE.autoCollapseSidebar, true);
+import { EDITOR_ENGINES, INDENT_MODES, NAME, SYNC_MODES } from './constants.js';
+import { getReplaceTextFieldExceptions, isAutoCollapseSidebarEnabled, isFullJsonHistoryIgnored, isHideNonEditableSourcesEnabled, isMonacoMinimapEnabled, isReplaceTextFieldLineNumbersEnabled, isReplaceTextFieldWordWrapEnabled, isReplaceTextFieldsEnabled, isSpellCheckEnabled, isWordWrapEnabled, } from './settings.js';
 export function renderSettingsPanel(host) {
     const settingsPanel = document.createElement('section');
     host.dom.settingsPanel = settingsPanel;
@@ -15,24 +11,187 @@ export function renderSettingsPanel(host) {
     settingsPanel.append(settingsHead);
     const settingsBody = document.createElement('div');
     settingsBody.classList.add('etle--settingsBody');
-    settingsBody.append(renderSharedEditorSettings(host), renderCoreEditorSettings(host), renderPrismSettings(host), renderMonacoSettings(host), renderHistorySettings(host));
+    settingsBody.append(renderSettingsSection('main', 'Main Editor', 'fa-pen-to-square', 'Settings for the Every Text Line Editor drawer.', [
+        renderCoreEditorSettings(host),
+        renderFontSettings(host),
+        renderSharedEditorSettings(host),
+        renderPrismSettings(host),
+        renderMonacoSettings(host),
+    ]), renderSettingsSection('replacement', 'ST Textfield Replacement', 'fa-i-cursor', 'Defaults for replaced textboxes. Each textbox can override these in its status bar or the list.', [
+        renderTextFieldReplacementSettings(host),
+    ]), renderSettingsSection('history', 'History', 'fa-code-branch', '', [
+        renderHistorySettings(host),
+    ]), renderSettingsSection('info', 'Info & Feedback', 'fa-circle-info', '', [
+        renderInfoFeedbackSection(),
+    ]));
     settingsPanel.append(settingsBody);
     return settingsPanel;
 }
+function renderSettingsSection(id, title, icon, subtitle, children) {
+    const section = document.createElement('section');
+    section.classList.add('etle--settingsSection');
+    section.dataset.settingsSection = id;
+    const header = document.createElement('div');
+    header.classList.add('etle--settingsSectionHead');
+    header.innerHTML = `<span class="fa-solid fa-fw ${icon}"></span><h5></h5>`;
+    header.children[1].textContent = title;
+    section.append(header);
+    if (subtitle) {
+        const note = document.createElement('small');
+        note.classList.add('etle--settingsSectionNote');
+        note.textContent = subtitle;
+        section.append(note);
+    }
+    const body = document.createElement('div');
+    body.classList.add('etle--settingsSectionBody');
+    body.append(...children);
+    section.append(body);
+    return section;
+}
+function renderFontSettings(host) {
+    const group = host.createPropGroup('Editor Font');
+    const row = document.createElement('div');
+    row.classList.add('etle--fontRow');
+    const select = document.createElement('select');
+    select.classList.add('text_pole');
+    host.dom.editorFont = select;
+    for (const font of host.availableFonts) {
+        const option = document.createElement('option');
+        option.value = font.id;
+        option.textContent = font.label;
+        select.append(option);
+    }
+    select.value = host.selectedFontId;
+    select.addEventListener('change', () => {
+        host.setEditorFont(select.value).catch((error) => {
+            console.error(`[${NAME}] Failed to apply editor font`, error);
+        });
+    });
+    const refreshBtn = host.makeIconButton('fa-sync-alt', 'Rescan data/<user>/assets/fonts/ folder', () => {
+        host.refreshFonts().catch((error) => console.error(`[${NAME}] Failed to refresh fonts`, error));
+    });
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.woff2,.woff,.ttf,.otf';
+    fileInput.hidden = true;
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files?.[0];
+        fileInput.value = '';
+        if (!file)
+            return;
+        host.uploadFontFile(file).catch((error) => console.error(`[${NAME}] Failed to upload font`, error));
+    });
+    const uploadBtn = host.makeIconButton('fa-upload', 'Upload font file (.woff2, .woff, .ttf, .otf)', () => fileInput.click());
+    row.addEventListener('dragover', (event) => {
+        event.preventDefault();
+        row.classList.add('etle--fontDropActive');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('etle--fontDropActive'));
+    row.addEventListener('drop', (event) => {
+        event.preventDefault();
+        row.classList.remove('etle--fontDropActive');
+        const file = event.dataTransfer?.files?.[0];
+        if (!file)
+            return;
+        host.uploadFontFile(file).catch((error) => console.error(`[${NAME}] Failed to upload dropped font`, error));
+    });
+    row.append(select, refreshBtn, uploadBtn, fileInput);
+    const note = document.createElement('small');
+    note.textContent = 'Drop .woff2/.woff/.ttf/.otf here, upload, or place fonts in data/<user>/assets/fonts/ and refresh.';
+    group.append(row, note);
+    return group;
+}
 function renderSharedEditorSettings(host) {
-    const editorGroup = host.createPropGroup('Shared Editor');
-    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => host.setWordWrap(!getSetting(STORAGE.wordWrap, true)));
+    const editorGroup = host.createPropGroup('Behavior');
+    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => host.setWordWrap(!isWordWrapEnabled()));
     wrapButton.dataset.setting = 'wrap';
     const spellButton = host.makeTextButton('Spell Check', 'fa-spell-check', () => host.setSpellCheck(!isSpellCheckEnabled()));
     spellButton.dataset.setting = 'spell';
     const autoCollapseButton = host.makeTextButton('Auto-Collapse Sidebar', 'fa-table-columns', () => host.setAutoCollapseSidebar(!isAutoCollapseSidebarEnabled()));
     autoCollapseButton.dataset.setting = 'autoCollapseSidebar';
     autoCollapseButton.title = 'Automatically collapse the sidebar when the panel width is below 800 px';
+    const hideNonEditableButton = host.makeTextButton('Hide Non-Editable', 'fa-eye-slash', () => host.setHideNonEditableSources(!isHideNonEditableSourcesEnabled()));
+    hideNonEditableButton.dataset.setting = 'hideNonEditable';
+    hideNonEditableButton.title = 'Hide read-only and non-editable placeholder items in the source list';
     const editorButtons = document.createElement('div');
     editorButtons.classList.add('etle--settingsButtonRow');
-    editorButtons.append(wrapButton, spellButton, autoCollapseButton);
-    editorGroup.append(editorButtons);
+    editorButtons.append(wrapButton, spellButton, autoCollapseButton, hideNonEditableButton);
+    const ltNote = document.createElement('small');
+    ltNote.textContent = 'LanguageTool grammar checking requires the SillyTavern LanguageTool server plugin; its status bar toggle appears automatically when the plugin is installed.';
+    editorGroup.append(editorButtons, ltNote);
     return editorGroup;
+}
+function renderTextFieldReplacementSettings(host) {
+    const container = document.createElement('div');
+    container.classList.add('etle--settingsSectionBody');
+    const row = document.createElement('div');
+    row.classList.add('etle--settingsButtonRow');
+    const replaceButton = host.makeTextButton('Replace ST Textfields', 'fa-i-cursor', () => {
+        host.setReplaceTextFields(!isReplaceTextFieldsEnabled()).catch((error) => {
+            console.error(`[${NAME}] Failed to toggle SillyTavern textfield replacement`, error);
+        });
+    });
+    replaceButton.dataset.setting = 'replaceTextFields';
+    replaceButton.title = 'Replace SillyTavern textareas with the selected replacement editor (Prism or Monaco)';
+    const replacementEnabled = isReplaceTextFieldsEnabled();
+    const lineNumbersButton = host.makeTextButton('Line Numbers', 'fa-list-ol', () => {
+        host.setReplaceTextFieldLineNumbers(!isReplaceTextFieldLineNumbersEnabled());
+    });
+    lineNumbersButton.dataset.setting = 'replaceTextFieldLineNumbers';
+    lineNumbersButton.dataset.requiresReplacement = '1';
+    lineNumbersButton.disabled = !replacementEnabled;
+    lineNumbersButton.title = 'Show or hide line numbers in replaced SillyTavern textfields';
+    const wrapButton = host.makeTextButton('Word Wrap', 'fa-align-left', () => {
+        host.setReplaceTextFieldWordWrap(!isReplaceTextFieldWordWrapEnabled());
+    });
+    wrapButton.dataset.setting = 'replaceTextFieldWordWrap';
+    wrapButton.dataset.requiresReplacement = '1';
+    wrapButton.disabled = !replacementEnabled;
+    wrapButton.title = 'Toggle word wrap in replaced SillyTavern textfields';
+    row.append(replaceButton, lineNumbersButton, wrapButton);
+    const engineGrid = document.createElement('div');
+    engineGrid.classList.add('etle--settingsGrid');
+    engineGrid.append(renderSelectGroup(host, 'Replacement Engine', EDITOR_ENGINES, host.replaceTextFieldEngine.id, (value, select) => {
+        const engine = EDITOR_ENGINES.find(item => item.id === value) ?? EDITOR_ENGINES[0];
+        host.setReplaceTextFieldEngine(engine).catch((error) => {
+            console.error(`[${NAME}] Failed to switch replacement editor engine`, error);
+            select.value = host.replaceTextFieldEngine.id;
+        });
+    }, (select) => {
+        select.dataset.requiresReplacement = '1';
+        select.disabled = !replacementEnabled;
+        host.dom.replaceTextFieldEngine = select;
+    }));
+    const exceptionsGroup = host.createPropGroup('Excluded Textfields');
+    const exceptionsInput = document.createElement('textarea');
+    exceptionsInput.classList.add('text_pole', 'etle--exceptionList');
+    exceptionsInput.dataset.etleInternal = '1';
+    exceptionsInput.dataset.requiresReplacement = '1';
+    exceptionsInput.disabled = !replacementEnabled;
+    exceptionsInput.rows = 3;
+    exceptionsInput.placeholder = '#send_textarea';
+    exceptionsInput.value = getReplaceTextFieldExceptions();
+    let debounceTimer = null;
+    const commitExceptions = () => {
+        if (debounceTimer !== null) {
+            window.clearTimeout(debounceTimer);
+            debounceTimer = null;
+        }
+        host.setReplaceTextFieldExceptions(exceptionsInput.value).catch((error) => {
+            console.error(`[${NAME}] Failed to update textfield exceptions`, error);
+        });
+    };
+    exceptionsInput.addEventListener('input', () => {
+        if (debounceTimer !== null)
+            window.clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(commitExceptions, 250);
+    });
+    exceptionsInput.addEventListener('change', commitExceptions);
+    const note = document.createElement('small');
+    note.textContent = 'CSS selectors or IDs, one per line or comma-separated. ETLE editors are always excluded.';
+    exceptionsGroup.append(exceptionsInput, note);
+    container.append(row, engineGrid, exceptionsGroup);
+    return container;
 }
 function renderCoreEditorSettings(host) {
     const editorSelects = document.createElement('div');
@@ -71,7 +230,8 @@ function renderMonacoSettings(host) {
     return monacoGroup;
 }
 function renderHistorySettings(host) {
-    const historyGroup = host.createPropGroup('History');
+    const historyGroup = document.createElement('div');
+    historyGroup.classList.add('etle--settingsSectionBody');
     const historyGrid = document.createElement('div');
     historyGrid.classList.add('etle--settingsGrid');
     const limitGroup = host.createPropGroup('Commits per Source');
@@ -104,6 +264,44 @@ function renderHistorySettings(host) {
     historyActions.append(ignoreJsonBtn, exportBtn, clearBtn);
     historyGroup.append(historyActions);
     return historyGroup;
+}
+function renderInfoFeedbackSection() {
+    const blockquote = document.createElement('blockquote');
+    blockquote.classList.add('etle--infoBlockquote');
+    const note = document.createElement('p');
+    note.innerHTML = '<strong>Note:</strong> Every Text Line Editor and my other extensions are currently in maintenance mode, updated only as I run into issues myself. Ongoing features and active development depend on community support. If you find these extensions useful, consider donating — or at least starring on GitHub — to help keep them moving.';
+    const links = document.createElement('div');
+    links.classList.add('etle--supportLinks');
+    const discord = document.createElement('a');
+    discord.href = 'https://discord.gg/2tJcWeMjFQ';
+    discord.target = '_blank';
+    discord.rel = 'noopener noreferrer';
+    discord.classList.add('etle--supportLink');
+    discord.innerHTML = '<i class="fa-brands fa-discord" aria-hidden="true"></i><span>Discord (IceFog\'s AI Brew Bar)</span>';
+    const paypal = document.createElement('a');
+    paypal.href = 'https://www.paypal.com/ncp/payment/ABWFG6Y3SRGE6';
+    paypal.target = '_blank';
+    paypal.rel = 'noopener noreferrer';
+    paypal.classList.add('etle--supportLink');
+    paypal.innerHTML = '<i class="fa-solid fa-piggy-bank" aria-hidden="true"></i><span>Support my projects (PayPal)</span>';
+    const issues = document.createElement('a');
+    issues.href = 'https://github.com/IceFog72/SillyTavern-EveryTextLineEditor/issues';
+    issues.target = '_blank';
+    issues.rel = 'noopener noreferrer';
+    issues.classList.add('etle--supportLink');
+    issues.innerHTML = '<i class="fa-brands fa-github" aria-hidden="true"></i><span>Issues &amp; Feedback</span>';
+    const stars = document.createElement('a');
+    stars.href = 'https://github.com/IceFog72/SillyTavern-EveryTextLineEditor';
+    stars.target = '_blank';
+    stars.rel = 'noopener noreferrer';
+    stars.classList.add('etle--supportBadge');
+    const starsImg = document.createElement('img');
+    starsImg.src = 'https://img.shields.io/github/stars/IceFog72/SillyTavern-EveryTextLineEditor?style=social';
+    starsImg.alt = 'GitHub stars';
+    stars.append(starsImg);
+    links.append(discord, paypal, issues, stars);
+    blockquote.append(note, links);
+    return blockquote;
 }
 function renderSelectGroup(host, label, options, value, onChange, onCreate) {
     const group = host.createPropGroup(label);

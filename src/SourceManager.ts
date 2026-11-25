@@ -22,8 +22,8 @@ import { uploadFileAttachment } from '../../../../chats.js';
 import { convertTextToBase64, getStringHash } from '../../../../utils.js';
 import { diffLines, type Change } from './vendor/diff/index.js';
 import { GENERATION_TRIGGERS, NAME, STORAGE, TEXT_FIELDS } from './constants.js';
-import { AlignedDiff, BranchManager, DiffMark, TextSource } from './types.js';
-import { getSetting, setSetting } from './settings.js';
+import { AlignedDiff, BranchManager, CustomExtensionField, DiffMark, TextSource } from './types.js';
+import { getCustomExtensionFields, getSetting, setSetting } from './settings.js';
 
 const GROUP_ORDER: Record<string, number> = {
     'Chat Completion Prompts': 10,
@@ -36,10 +36,12 @@ const GROUP_ORDER: Record<string, number> = {
     'System Prompt': 80,
     'Power User Customization': 90,
     'Connection Profiles': 100,
+    'Custom Parameters': 105,
     'Personas': 110,
     'Prompt Inspector': 115,
     'Character Cards': 120,
     'Data Bank': 130,
+    'Extension Fields': 140,
 };
 
 const JSON_SOURCE_ORDER = 1_000_000;
@@ -193,14 +195,66 @@ export const getLineDiff = (oldText: string, newText: string): AlignedDiff => {
     }
 };
 
-const savePowerUserField = (selector: string, value: string) => {
+export const syncDomField = (selector: string | null | undefined, value: string): boolean => {
+    if (!selector) return false;
     const field = document.querySelector(selector);
-    if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
+    if (!(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)) return false;
+    if (field.value !== value) {
         field.value = value;
         field.dispatchEvent(new Event('input', { bubbles: true }));
         field.dispatchEvent(new Event('change', { bubbles: true }));
     }
+    return true;
+};
+
+const savePowerUserField = (selector: string, value: string) => {
+    syncDomField(selector, value);
     saveSettingsDebounced();
+};
+
+const getTextGenFieldSelector = (property: string): string =>
+    `#${property}_textgenerationwebui, #${property}, #textgen_${property}`;
+
+const formatTextGenValue = (value: unknown): string =>
+    typeof value === 'string' ? value : JSON.stringify(value ?? '', null, 2);
+
+const syncOaiDomFields = () => {
+    if (!oai_settings) return;
+    for (const group of [TEXT_FIELDS.utility, TEXT_FIELDS.formatting, TEXT_FIELDS.customOpenAi]) {
+        for (const [property, , selector] of group) {
+            if (typeof oai_settings[property] === 'string') syncDomField(selector, oai_settings[property]);
+        }
+    }
+};
+
+const syncTextGenDomFields = () => {
+    if (!textgenerationwebui_settings) return;
+    for (const [property] of TEXT_FIELDS.textgen) {
+        if (property in textgenerationwebui_settings) {
+            syncDomField(getTextGenFieldSelector(property), formatTextGenValue(textgenerationwebui_settings[property]));
+        }
+    }
+};
+
+const syncContextDomFields = () => {
+    if (!power_user?.context) return;
+    for (const [property] of TEXT_FIELDS.context) {
+        syncDomField(`#context_${property}`, String(power_user.context[property] ?? ''));
+    }
+};
+
+const syncInstructDomFields = () => {
+    if (!power_user?.instruct) return;
+    for (const [property] of TEXT_FIELDS.instruct) {
+        syncDomField(`#instruct_${property}`, String(power_user.instruct[property] ?? ''));
+    }
+};
+
+const syncSystemPromptDomFields = () => {
+    if (!power_user?.sysprompt) return;
+    for (const [property] of TEXT_FIELDS.sysprompt) {
+        syncDomField(getSystemPromptFieldSelector(property), String(power_user.sysprompt[property] ?? ''));
+    }
 };
 
 const makeObjectFieldSource = ({ id, label, group, object, property, selector = null }: {
@@ -323,7 +377,10 @@ const makeThemeJsonSource = (): TextSource => {
                 Object.assign(power_user, theme);
                 power_user.theme = nextThemeName;
             }
-            if (typeof theme.custom_css === 'string') applyCustomCss(theme.custom_css);
+            if (typeof theme.custom_css === 'string') {
+                applyCustomCss(theme.custom_css);
+                syncDomField('#customCSS', theme.custom_css);
+            }
             saveSettingsDebounced();
             pendingTheme = null;
         },
@@ -342,12 +399,7 @@ const makeCustomCssSource = (): TextSource => ({
     read: () => String(power_user?.custom_css ?? ''),
     write: (value) => {
         power_user.custom_css = value;
-        const field = document.querySelector('#customCSS');
-        if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
-            field.value = value;
-            field.dispatchEvent(new Event('input', { bubbles: true }));
-            field.dispatchEvent(new Event('change', { bubbles: true }));
-        } else {
+        if (!syncDomField('#customCSS', value)) {
             applyCustomCss(value);
             saveSettingsDebounced();
         }
@@ -463,18 +515,10 @@ const makeTextGenFieldSource = (property: string, label: string): TextSource => 
         groupOrder: GROUP_ORDER['Text Completion Parameters'],
         readonly: false,
         branchManager,
-        read: () => {
-            const value = textgenerationwebui_settings?.[property];
-            return typeof value === 'string' ? value : JSON.stringify(value ?? '', null, 2);
-        },
+        read: () => formatTextGenValue(textgenerationwebui_settings?.[property]),
         write: (value) => {
             textgenerationwebui_settings[property] = value;
-            const field = document.querySelector(`#${property}_textgenerationwebui, #${property}, #textgen_${property}`);
-            if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
-                field.value = value;
-                field.dispatchEvent(new Event('input', { bubbles: true }));
-                field.dispatchEvent(new Event('change', { bubbles: true }));
-            }
+            syncDomField(getTextGenFieldSelector(property), value);
         },
         save: saveTextGenPreset,
         meta: textgenerationwebui_settings?.preset ? `Text Completion preset: ${textgenerationwebui_settings.preset}` : 'Text Completion preset',
@@ -526,6 +570,133 @@ const getConnectionManagerProfiles = (): Record<string, any>[] => {
 const getSelectedConnectionProfile = (): Record<string, any> | null => {
     const selected = extension_settings?.connectionManager?.selectedProfile;
     return getConnectionManagerProfiles().find(profile => profile.id === selected) ?? null;
+};
+
+const getCustomParametersSources = (): TextSource[] => {
+    const ap = extension_settings?.advancedParameters;
+    if (!ap || typeof ap !== 'object' || !Array.isArray(ap.collections) || !ap.collections.length) {
+        return [];
+    }
+    const collection = ap.collections.find((c: any) => c?.active) ?? ap.collections[0];
+    if (!collection || !Array.isArray(collection.parameters)) return [];
+
+    const collectionName = String(collection.name ?? 'Default');
+    const sources: TextSource[] = [];
+    for (let index = 0; index < collection.parameters.length; index++) {
+        const param = collection.parameters[index];
+        if (!param || typeof param !== 'object' || !param.id) continue;
+        if (param.type !== 'textarea' && param.type !== 'array' && param.type !== 'object') continue;
+
+        const paramId = String(param.id);
+        const selector = `#advanced_runtime_${paramId}`;
+        const label = String(param.name || param.property || paramId);
+        const type = param.type as 'textarea' | 'array' | 'object';
+
+        sources.push({
+            id: `custom-parameters:${collectionName}:${paramId}`,
+            label,
+            group: 'Custom Parameters',
+            groupOrder: GROUP_ORDER['Custom Parameters'],
+            order: index,
+            readonly: false,
+            enabled: Boolean(param.enabled),
+            read: () => {
+                if (type === 'textarea') return String(param.textValue ?? '');
+                if (type === 'object') {
+                    if (typeof param.objectRaw === 'string' && param.objectRaw.length) return param.objectRaw;
+                    return JSON.stringify(param.objectValue ?? {}, null, 2);
+                }
+                const field = typeof document !== 'undefined' ? document.querySelector(selector) : null;
+                if (field instanceof HTMLTextAreaElement) return field.value;
+                const delimiter = String(param.arrayDelimiter || ',');
+                return Array.isArray(param.arrayValue) ? param.arrayValue.map(item => String(item)).join(delimiter) : '';
+            },
+            write: (value) => {
+                if (type === 'textarea') {
+                    param.textValue = value;
+                } else if (type === 'object') {
+                    const parsed = JSON.parse(value);
+                    if (!parsed || typeof parsed !== 'object') {
+                        throw new Error(`${label} must be a JSON object or array.`);
+                    }
+                    param.objectRaw = value;
+                    param.objectValue = parsed;
+                } else {
+                    const delimiter = String(param.arrayDelimiter || ',');
+                    param.arrayValue = value.split(delimiter).map(part => part.trim()).filter(Boolean);
+                }
+                syncDomField(selector, value);
+            },
+            save: () => saveSettingsDebounced(),
+            meta: `Custom Parameters (${collectionName}, ${type})${param.property ? ` · ${param.property}` : ''}`,
+        });
+    }
+    return sources;
+};
+
+const EXTENSION_FIELD_EXCLUDED_ANCESTORS = '#etle--drawer, #etle--panel, .etle--inlineEditorHost, .prism-code-editor, .monaco-editor, .CodeMirror, .ace_editor';
+
+export const discoverExtensionTextFields = (root: ParentNode = document): CustomExtensionField[] => {
+    if (!root?.querySelectorAll) return [];
+    const seen = new Set<string>();
+    const results: CustomExtensionField[] = [];
+    const nodes = Array.from(root.querySelectorAll<HTMLTextAreaElement>('#extensions_settings textarea, #extensions_settings2 textarea'));
+    for (const textarea of nodes) {
+        if (textarea.dataset?.etleInternal === '1') continue;
+        if (textarea.closest?.(EXTENSION_FIELD_EXCLUDED_ANCESTORS)) continue;
+
+        const id = textarea.id?.trim() ?? '';
+        const name = textarea.name?.trim() ?? '';
+        const selector = id
+            ? `#${id}`
+            : name
+                ? `textarea[name="${name.replace(/"/g, '\\"')}"]`
+                : '';
+        if (!selector || seen.has(selector)) continue;
+        seen.add(selector);
+
+        const drawer = textarea.closest?.('.inline-drawer');
+        const headerText = drawer?.querySelector?.('.inline-drawer-header b, .inline-drawer-header h4, .inline-drawer-header span, .inline-drawer-header')?.textContent?.trim() ?? '';
+        const group = headerText ? `Extension: ${headerText}` : 'Extension Fields';
+
+        let labelText = '';
+        if (id && typeof document !== 'undefined' && document.querySelector) {
+            labelText = document.querySelector(`label[for="${id.replace(/"/g, '\\"')}"]`)?.textContent?.trim() ?? '';
+        }
+        if (!labelText) {
+            const parentLabel = textarea.closest?.('label');
+            const labelSpan = parentLabel?.querySelector?.('span, small');
+            labelText = labelSpan?.textContent?.trim() || textarea.getAttribute?.('aria-label')?.trim() || textarea.placeholder?.trim() || id || name;
+        }
+        const label = labelText.split('\n')[0].trim().slice(0, 80) || id || name;
+
+        results.push({ selector, label, group });
+    }
+    return results.sort((a, b) => a.group.localeCompare(b.group) || a.label.localeCompare(b.label));
+};
+
+const getCustomExtensionFieldSources = (): TextSource[] => {
+    const fields = getCustomExtensionFields();
+    if (!fields.length) return [];
+    return fields.map((field, index): TextSource => ({
+        id: `ext-field:${field.selector}`,
+        label: field.label || field.selector,
+        group: field.group || 'Extension Fields',
+        groupOrder: GROUP_ORDER['Extension Fields'],
+        order: index,
+        readonly: false,
+        read: () => {
+            if (typeof document === 'undefined') return '';
+            const el = document.querySelector(field.selector);
+            if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) return String(el.value ?? '');
+            return '';
+        },
+        write: (value) => {
+            syncDomField(field.selector, value);
+        },
+        save: () => saveSettingsDebounced(),
+        meta: `Extension field (${field.selector})`,
+    }));
 };
 
 const getCharacterByAvatar = (avatar: string): Record<string, any> | null => (
@@ -597,17 +768,30 @@ const saveCharacterCard = async (character: Record<string, any>) => {
 };
 
 const CHARACTER_CARD_FIELDS = [
-    { key: 'description', label: 'Description', get: (card: Record<string, any>) => card.description ?? card.data?.description, set: (card: Record<string, any>, value: string) => { card.description = value; (card.data ??= {}).description = value; } },
-    { key: 'personality', label: 'Personality', get: (card: Record<string, any>) => card.personality ?? card.data?.personality, set: (card: Record<string, any>, value: string) => { card.personality = value; (card.data ??= {}).personality = value; } },
-    { key: 'scenario', label: 'Scenario', get: (card: Record<string, any>) => card.scenario ?? card.data?.scenario, set: (card: Record<string, any>, value: string) => { card.scenario = value; (card.data ??= {}).scenario = value; } },
-    { key: 'first_mes', label: 'First Message', get: (card: Record<string, any>) => card.first_mes ?? card.data?.first_mes, set: (card: Record<string, any>, value: string) => { card.first_mes = value; (card.data ??= {}).first_mes = value; } },
-    { key: 'mes_example', label: 'Example Dialogue', get: (card: Record<string, any>) => card.mes_example ?? card.data?.mes_example, set: (card: Record<string, any>, value: string) => { card.mes_example = value; (card.data ??= {}).mes_example = value; } },
-    { key: 'creator_notes', label: 'Creator Notes', get: (card: Record<string, any>) => card.data?.creator_notes ?? card.creatorcomment, set: (card: Record<string, any>, value: string) => { (card.data ??= {}).creator_notes = value; card.creatorcomment = value; } },
-    { key: 'system_prompt', label: 'System Prompt', get: (card: Record<string, any>) => card.data?.system_prompt, set: (card: Record<string, any>, value: string) => { (card.data ??= {}).system_prompt = value; } },
-    { key: 'post_history_instructions', label: 'Post-History Instructions', get: (card: Record<string, any>) => card.data?.post_history_instructions, set: (card: Record<string, any>, value: string) => { (card.data ??= {}).post_history_instructions = value; } },
-    { key: 'depth_prompt_prompt', label: "Character's Note", get: (card: Record<string, any>) => card.data?.extensions?.depth_prompt?.prompt ?? card.depth_prompt_prompt, set: (card: Record<string, any>, value: string) => { ((card.data ??= {}).extensions ??= {}).depth_prompt ??= {}; card.data.extensions.depth_prompt.prompt = value; card.depth_prompt_prompt = value; } },
-    { key: 'tags', label: 'Tags to Embed', get: (card: Record<string, any>) => Array.isArray(card.data?.tags ?? card.tags) ? (card.data?.tags ?? card.tags).join(', ') : card.data?.tags ?? card.tags, set: (card: Record<string, any>, value: string) => { const tags = value.split(',').map(tag => tag.trim()).filter(Boolean); card.tags = tags; (card.data ??= {}).tags = tags; } },
+    { key: 'description', label: 'Description', selector: '#description_textarea', get: (card: Record<string, any>) => card.description ?? card.data?.description, set: (card: Record<string, any>, value: string) => { card.description = value; (card.data ??= {}).description = value; } },
+    { key: 'personality', label: 'Personality', selector: '#personality_textarea', get: (card: Record<string, any>) => card.personality ?? card.data?.personality, set: (card: Record<string, any>, value: string) => { card.personality = value; (card.data ??= {}).personality = value; } },
+    { key: 'scenario', label: 'Scenario', selector: '#scenario_pole', get: (card: Record<string, any>) => card.scenario ?? card.data?.scenario, set: (card: Record<string, any>, value: string) => { card.scenario = value; (card.data ??= {}).scenario = value; } },
+    { key: 'first_mes', label: 'First Message', selector: '#firstmessage_textarea', get: (card: Record<string, any>) => card.first_mes ?? card.data?.first_mes, set: (card: Record<string, any>, value: string) => { card.first_mes = value; (card.data ??= {}).first_mes = value; } },
+    { key: 'mes_example', label: 'Example Dialogue', selector: '#mes_example_textarea', get: (card: Record<string, any>) => card.mes_example ?? card.data?.mes_example, set: (card: Record<string, any>, value: string) => { card.mes_example = value; (card.data ??= {}).mes_example = value; } },
+    { key: 'creator_notes', label: 'Creator Notes', selector: '#creator_notes_textarea', get: (card: Record<string, any>) => card.data?.creator_notes ?? card.creatorcomment, set: (card: Record<string, any>, value: string) => { (card.data ??= {}).creator_notes = value; card.creatorcomment = value; } },
+    { key: 'system_prompt', label: 'System Prompt', selector: '#system_prompt_textarea', get: (card: Record<string, any>) => card.data?.system_prompt, set: (card: Record<string, any>, value: string) => { (card.data ??= {}).system_prompt = value; } },
+    { key: 'post_history_instructions', label: 'Post-History Instructions', selector: '#post_history_instructions_textarea', get: (card: Record<string, any>) => card.data?.post_history_instructions, set: (card: Record<string, any>, value: string) => { (card.data ??= {}).post_history_instructions = value; } },
+    { key: 'depth_prompt_prompt', label: "Character's Note", selector: '#depth_prompt_prompt', get: (card: Record<string, any>) => card.data?.extensions?.depth_prompt?.prompt ?? card.depth_prompt_prompt, set: (card: Record<string, any>, value: string) => { ((card.data ??= {}).extensions ??= {}).depth_prompt ??= {}; card.data.extensions.depth_prompt.prompt = value; card.depth_prompt_prompt = value; } },
+    { key: 'tags', label: 'Tags to Embed', selector: '#tags_textarea', get: (card: Record<string, any>) => Array.isArray(card.data?.tags ?? card.tags) ? (card.data?.tags ?? card.tags).join(', ') : card.data?.tags ?? card.tags, set: (card: Record<string, any>, value: string) => { const tags = value.split(',').map(tag => tag.trim()).filter(Boolean); card.tags = tags; (card.data ??= {}).tags = tags; } },
 ] as const;
+
+const isCurrentCharacterAvatar = (avatar: string): boolean => {
+    const current = getCurrentCharacter();
+    return !!current?.avatar && String(current.avatar) === avatar;
+};
+
+const syncCharacterCardDomFields = (character: Record<string, any>) => {
+    const avatar = String(character?.avatar ?? '');
+    if (!avatar || !isCurrentCharacterAvatar(avatar)) return;
+    for (const field of CHARACTER_CARD_FIELDS) {
+        syncDomField(field.selector, String(field.get(character) ?? ''));
+    }
+};
 
 const makeCharacterCardSources = (character: Record<string, any>, {
     group,
@@ -634,6 +818,7 @@ const makeCharacterCardSources = (character: Record<string, any>, {
     const save = async () => {
         await saveCharacterCard(activeCharacter);
         activeCharacter = await getFreshCharacter(String(activeCharacter.avatar ?? avatar));
+        syncCharacterCardDomFields(activeCharacter);
     };
 
     const sources = CHARACTER_CARD_FIELDS.map((field, index): TextSource => ({
@@ -710,6 +895,7 @@ const makeDataBankSource = (attachment: DataBankAttachment, {
         group,
         groupOrder: GROUP_ORDER['Data Bank'],
         readonly: false,
+        enabled: !disabled,
         read: () => file.text,
         readFresh: async () => {
             // Keep a failed partial save dirty in the editor so Apply can retry it.
@@ -1131,7 +1317,10 @@ export const getSources = async (): Promise<TextSource[]> => {
             order: JSON_SOURCE_ORDER,
             object: oai_settings,
             branchManager,
-            save: () => saveSettingsDebounced(),
+            save: () => {
+                syncOaiDomFields();
+                saveSettingsDebounced();
+            },
             meta: 'OpenAI/chat completion settings JSON',
         }));
 
@@ -1159,7 +1348,7 @@ export const getSources = async (): Promise<TextSource[]> => {
             }));
         }
 
-        for (const [property, label] of TEXT_FIELDS.customOpenAi) {
+        for (const [property, label, selector] of TEXT_FIELDS.customOpenAi) {
             if (typeof oai_settings[property] !== 'string') continue;
             sources.push(makeObjectFieldSource({
                 id: `oai_settings:${property}`,
@@ -1167,6 +1356,7 @@ export const getSources = async (): Promise<TextSource[]> => {
                 group: 'Custom OpenAI Parameters',
                 object: oai_settings,
                 property,
+                selector,
             }));
         }
     }
@@ -1183,7 +1373,10 @@ export const getSources = async (): Promise<TextSource[]> => {
             order: JSON_SOURCE_ORDER,
             object: textgenerationwebui_settings,
             branchManager,
-            save: saveTextGenPreset,
+            save: async () => {
+                syncTextGenDomFields();
+                await saveTextGenPreset();
+            },
             meta: textgenerationwebui_settings?.preset ? `Text Completion preset JSON: ${textgenerationwebui_settings.preset}` : 'Text Completion preset JSON',
         }));
 
@@ -1205,7 +1398,10 @@ export const getSources = async (): Promise<TextSource[]> => {
             order: JSON_SOURCE_ORDER,
             object: power_user.context,
             branchManager,
-            save: () => saveSettingsDebounced(),
+            save: () => {
+                syncContextDomFields();
+                saveSettingsDebounced();
+            },
             meta: power_user?.context?.preset ? `Context template JSON: ${power_user.context.preset}` : 'Context template JSON',
         }));
 
@@ -1233,7 +1429,10 @@ export const getSources = async (): Promise<TextSource[]> => {
             order: JSON_SOURCE_ORDER,
             object: power_user.instruct,
             branchManager,
-            save: saveInstructPreset,
+            save: async () => {
+                syncInstructDomFields();
+                await saveInstructPreset();
+            },
             meta: power_user?.instruct?.preset ? `Instruct template JSON: ${power_user.instruct.preset}` : 'Instruct template JSON',
         }));
 
@@ -1254,7 +1453,10 @@ export const getSources = async (): Promise<TextSource[]> => {
             order: JSON_SOURCE_ORDER,
             object: power_user.sysprompt,
             branchManager,
-            save: saveSystemPromptPreset,
+            save: async () => {
+                syncSystemPromptDomFields();
+                await saveSystemPromptPreset();
+            },
             meta: power_user?.sysprompt?.name ? `System prompt preset JSON: ${power_user.sysprompt.name}` : 'System prompt preset JSON',
         }));
 
@@ -1332,6 +1534,9 @@ export const getSources = async (): Promise<TextSource[]> => {
     for (const profile of getConnectionManagerProfiles()) {
         sources.push(makeConnectionProfileSource(profile));
     }
+
+    sources.push(...getCustomParametersSources());
+    sources.push(...getCustomExtensionFieldSources());
 
     if (Array.isArray(characters) && characters.length) {
         const currentCharacter = getCurrentCharacter();
@@ -1464,4 +1669,16 @@ export const getSources = async (): Promise<TextSource[]> => {
         if (orderCompare) return orderCompare;
         return a.label.localeCompare(b.label);
     });
+};
+
+export const reloadAllSourceTextFields = () => {
+    syncOaiDomFields();
+    syncTextGenDomFields();
+    syncContextDomFields();
+    syncInstructDomFields();
+    syncSystemPromptDomFields();
+    if (typeof power_user?.custom_css === 'string') syncDomField('#customCSS', power_user.custom_css);
+    if (typeof power_user?.persona_description === 'string') syncDomField('#persona_description', power_user.persona_description);
+    const currentCharacter = getCurrentCharacter();
+    if (currentCharacter) syncCharacterCardDomFields(currentCharacter);
 };

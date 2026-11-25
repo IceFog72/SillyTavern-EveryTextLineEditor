@@ -72,7 +72,7 @@ function fixture() {
             },
         },
         './constants.js': constants,
-        './settings.js': { getSetting: (_key, fallback) => fallback },
+        './settings.js': { getSetting: (_key, fallback) => fallback, getCustomExtensionFields: () => [] },
         './vendor/diff/index.js': {},
     };
     const exports = {};

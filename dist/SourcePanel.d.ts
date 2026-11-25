@@ -1,4 +1,4 @@
-import { DomRefs, Language, TextSource } from './types.js';
+import { CustomExtensionField, DomRefs, Language, TextSource } from './types.js';
 export declare const isLorebookGroup: (group: string) => boolean;
 export declare const isCardGroup: (group: string) => boolean;
 interface SourcePanelHost {
@@ -14,6 +14,7 @@ interface SourcePanelHost {
         force?: boolean;
     }): Promise<void>;
     setTrackedSourceGroups(groups: string[]): Promise<void>;
+    setCustomExtensionFields(fields: CustomExtensionField[], selectedGroups: string[]): Promise<void>;
     makeTextButton(label: string, icon: string, onClick: () => void): HTMLButtonElement;
 }
 export declare function renderSourceTree(host: SourcePanelHost): void;

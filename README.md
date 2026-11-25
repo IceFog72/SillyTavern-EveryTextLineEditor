@@ -19,6 +19,8 @@ An in-SillyTavern editor for prompts, preset text, lorebook entries, personas, c
 * Syntax selection: choose Markdown, JSON, YAML, or plain text per source
 * Word wrap, spell check, minimap, and scroll-sync controls
 * Prompt controls: toggle enabled prompts and edit supported prompt metadata
+* Textbox status bars: choose an engine, language, word wrap, spell check, and Monaco minimap per box, open it in ETLE, or disable its replacement
+* Settings window: manage global defaults and saved overrides from a searchable textbox list
 * Local-first storage: history is stored in browser IndexedDB
 
 ---
@@ -69,6 +71,9 @@ Then reload SillyTavern and enable **Every Text Line Editor**.
 * Indentation settings apply to Prism only.
 * Monaco minimap is hidden while Monaco diff mode is open.
 * Language selection is per source and available from the status bar.
+* Each replaced SillyTavern textbox has its own bottom status bar. The gear opens its settings in the shared Settings window.
+* Per-textbox overrides persist across reloads. Disable replacement with the status bar's × button, then re-enable it from the Settings list.
+* Choose **Use defaults for this textbox** to remove its overrides. The global replacement switch and exclusion list still apply.
 
 ---
 

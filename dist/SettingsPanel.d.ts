@@ -1,19 +1,33 @@
 import { DomRefs, EditorEngine, IndentMode, SyncMode } from './types.js';
+import { FontOption } from './FontManager.js';
 export interface SettingsPanelHost {
     dom: DomRefs;
     editorEngine: EditorEngine;
+    replaceTextFieldEngine: EditorEngine;
+    availableFonts: FontOption[];
+    selectedFontId: string;
     scrollSyncMode: SyncMode;
     indentMode: IndentMode;
     createPropGroup(label: string): HTMLDivElement;
     makeTextButton(label: string, icon: string, onClick: () => void): HTMLButtonElement;
+    makeIconButton(icon: string, title: string, onClick: () => void): HTMLButtonElement;
     setWordWrap(enabled: boolean): void;
     setSpellCheck(enabled: boolean): void;
     setMonacoMinimap(enabled: boolean): void;
     setIgnoreFullJsonHistory(enabled: boolean): void;
     setEditorEngine(engine: EditorEngine): Promise<void>;
+    setEditorFont(fontId: string): Promise<void>;
+    refreshFonts(): Promise<void>;
+    uploadFontFile(file: File): Promise<void>;
     setScrollSync(mode: SyncMode): void;
     setIndentMode(mode: IndentMode): void;
     setAutoCollapseSidebar(enabled: boolean): void;
+    setHideNonEditableSources(enabled: boolean): void;
+    setReplaceTextFields(enabled: boolean): Promise<void>;
+    setReplaceTextFieldLineNumbers(enabled: boolean): void;
+    setReplaceTextFieldWordWrap(enabled: boolean): void;
+    setReplaceTextFieldEngine(engine: EditorEngine): Promise<void>;
+    setReplaceTextFieldExceptions(raw: string): Promise<void>;
     exportHistory(): Promise<void>;
     clearHistory(): Promise<void>;
 }

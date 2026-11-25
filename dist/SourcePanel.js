@@ -1,5 +1,6 @@
 import { NAME } from './constants.js';
-import { setCollapsedGroups } from './SourceManager.js';
+import { discoverExtensionTextFields, setCollapsedGroups } from './SourceManager.js';
+import { getCustomExtensionFields, isHideNonEditableSourcesEnabled } from './settings.js';
 export const isLorebookGroup = (group) => group.startsWith('World/Lorebook: ');
 export const isCardGroup = (group) => group === 'Current Card' || group.startsWith('Character Card: ');
 const getCardName = (group) => group === 'Current Card' ? 'Current Card' : group.replace(/^Character Card: /, '');
@@ -8,7 +9,10 @@ export function renderSourceTree(host) {
     host.dom.tree.innerHTML = '';
     const groups = new Map();
     const query = String(host.dom.sourceSearch?.value ?? '').trim().toLowerCase();
+    const hideNonEditable = isHideNonEditableSourcesEnabled();
     const trackedSources = host.getTrackedSources().filter(source => {
+        if (hideNonEditable && (source.readonly || source.selectable === false || source.placeholder))
+            return false;
         if (!query)
             return true;
         return [source.label, source.group, source.meta ?? '', source.id]
@@ -101,31 +105,29 @@ export function openSourceControlDialog(host) {
     const columns = document.createElement('div');
     columns.classList.add('etle--sourceDialogColumns');
     shell.append(columns);
-    if (!availableGroups.length) {
-        const empty = document.createElement('div');
-        empty.classList.add('etle--empty');
-        empty.textContent = 'No sources available.';
-        columns.append(empty);
-    }
-    else {
-        const categories = availableGroups.filter(([group]) => !isLorebookGroup(group) && !isCardGroup(group));
-        const lorebooks = availableGroups.filter(([group]) => isLorebookGroup(group));
-        const cards = availableGroups.filter(([group]) => isCardGroup(group));
-        appendSourceControlColumn(host, columns, 'Categories', categories, (group, count) => `${group} (${count})`, false, () => applySourceControlFilters(dialog, showOnlySelected));
-        appendSourceControlColumn(host, columns, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected));
-        appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected), cards.some(([group]) => group === 'Current Card') ? ['Current Card'] : []);
-        applySourceControlFilters(dialog, showOnlySelected);
-    }
+    const categories = availableGroups.filter(([group]) => !isLorebookGroup(group) && !isCardGroup(group));
+    const lorebooks = availableGroups.filter(([group]) => isLorebookGroup(group));
+    const cards = availableGroups.filter(([group]) => isCardGroup(group));
+    appendSourceControlColumn(host, columns, 'Categories', categories, (group, count) => `${group} (${count})`, false, () => applySourceControlFilters(dialog, showOnlySelected));
+    appendSourceControlColumn(host, columns, 'Lorebooks', lorebooks, (group, count) => `${getLorebookName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected));
+    appendSourceControlColumn(host, columns, 'Cards', cards, (group, count) => `${getCardName(group)} (${count})`, true, () => applySourceControlFilters(dialog, showOnlySelected), cards.some(([group]) => group === 'Current Card') ? ['Current Card'] : []);
+    appendExtensionFieldsColumn(columns, () => applySourceControlFilters(dialog, showOnlySelected));
+    applySourceControlFilters(dialog, showOnlySelected);
     const actions = document.createElement('div');
     actions.classList.add('etle--sourceDialogActions');
     const cancel = host.makeTextButton('Cancel', 'fa-xmark', () => dialog.close());
     cancel.value = 'cancel';
     const add = host.makeTextButton('Apply', 'fa-check', () => {
-        const selected = [...dialog.querySelectorAll('input[type="checkbox"]:checked')].map(input => input.value);
-        host.setTrackedSourceGroups(selected).catch((error) => console.error(`[${NAME}] Failed to update source categories`, error));
+        const selectedGroups = [...dialog.querySelectorAll('input[type="checkbox"][data-kind="group"]:checked')].map(input => input.value);
+        const selectedExtFields = [...dialog.querySelectorAll('input[type="checkbox"][data-kind="ext-field"]:checked')].map(input => ({
+            selector: input.dataset.extSelector ?? '',
+            label: input.dataset.extLabel ?? '',
+            group: input.dataset.extGroup ?? 'Extension Fields',
+        })).filter(field => Boolean(field.selector));
+        host.setCustomExtensionFields(selectedExtFields, selectedGroups)
+            .catch((error) => console.error(`[${NAME}] Failed to update source categories`, error));
         dialog.close();
     });
-    add.disabled = !availableGroups.length;
     actions.append(cancel, add);
     shell.append(actions);
     dialog.append(shell);
@@ -161,6 +163,8 @@ function renderSourceRow(host, source) {
         item.classList.add('etle--readonly');
     if (source.placeholder)
         item.classList.add('etle--placeholder');
+    if (source.enabled === false)
+        item.classList.add('etle--disabled');
     if (source.toggleable) {
         const toggle = document.createElement('button');
         toggle.type = 'button';
@@ -235,12 +239,95 @@ function renderSourceControlRow(host, group, count, formatLabel, pinned = false)
     row.dataset.filterText = `${group} ${formatLabel(group, count)}`.toLowerCase();
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
+    checkbox.dataset.kind = 'group';
     checkbox.value = group;
     checkbox.checked = host.trackedSourceGroups.has(group);
     const text = document.createElement('span');
     text.textContent = formatLabel(group, count);
     row.append(checkbox, text);
     return row;
+}
+function appendExtensionFieldsColumn(columns, onFilter) {
+    const column = document.createElement('section');
+    column.classList.add('etle--sourceDialogColumn');
+    const groupTitle = document.createElement('div');
+    groupTitle.classList.add('etle--sourceDialogGroup');
+    groupTitle.textContent = 'Extension Fields';
+    column.append(groupTitle);
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.placeholder = 'Search extension fields';
+    search.classList.add('etle--sourceDialogSearch');
+    search.addEventListener('input', () => onFilter());
+    column.append(search);
+    const saved = getCustomExtensionFields();
+    const savedBySelector = new Map(saved.map(item => [item.selector, item]));
+    const discovered = discoverExtensionTextFields();
+    const merged = new Map();
+    for (const item of discovered)
+        merged.set(item.selector, item);
+    for (const item of saved) {
+        if (!merged.has(item.selector))
+            merged.set(item.selector, item);
+    }
+    const addRow = (field, checked) => {
+        const row = document.createElement('label');
+        row.classList.add('etle--sourceDialogRow');
+        const extName = field.group.replace(/^Extension:\s*/, '');
+        const display = `${extName}: ${field.label}`;
+        row.dataset.filterText = `${display} ${field.selector}`.toLowerCase();
+        row.title = field.selector;
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.dataset.kind = 'ext-field';
+        checkbox.dataset.extSelector = field.selector;
+        checkbox.dataset.extLabel = field.label;
+        checkbox.dataset.extGroup = field.group;
+        checkbox.checked = checked;
+        const text = document.createElement('span');
+        text.textContent = display;
+        row.append(checkbox, text);
+        return row;
+    };
+    const listWrap = document.createElement('div');
+    listWrap.classList.add('etle--extFieldList');
+    for (const field of merged.values()) {
+        listWrap.append(addRow(field, savedBySelector.has(field.selector)));
+    }
+    column.append(listWrap);
+    const customForm = document.createElement('div');
+    customForm.classList.add('etle--extFieldCustom');
+    const selectorInput = document.createElement('input');
+    selectorInput.type = 'text';
+    selectorInput.classList.add('text_pole');
+    selectorInput.placeholder = '#selector (e.g. #memory_contents)';
+    const labelInput = document.createElement('input');
+    labelInput.type = 'text';
+    labelInput.classList.add('text_pole');
+    labelInput.placeholder = 'Label (optional)';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.classList.add('menu_button', 'fa-solid', 'fa-fw', 'fa-plus');
+    addBtn.title = 'Add custom CSS selector field';
+    addBtn.addEventListener('click', () => {
+        const selector = selectorInput.value.trim();
+        if (!selector)
+            return;
+        const label = labelInput.value.trim() || selector;
+        const existing = listWrap.querySelector(`input[data-ext-selector="${CSS.escape(selector)}"]`);
+        if (existing) {
+            existing.checked = true;
+        }
+        else {
+            listWrap.prepend(addRow({ selector, label, group: 'Extension Fields' }, true));
+        }
+        selectorInput.value = '';
+        labelInput.value = '';
+        onFilter();
+    });
+    customForm.append(selectorInput, labelInput, addBtn);
+    column.append(customForm);
+    columns.append(column);
 }
 function applySourceControlFilters(dialog, showOnlySelected) {
     dialog.querySelectorAll('.etle--sourceDialogColumn').forEach(column => {

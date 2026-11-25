@@ -4,6 +4,20 @@ export type Language = typeof LANGUAGES[number];
 export type SyncMode = typeof SYNC_MODES[number];
 export type EditorEngine = typeof EDITOR_ENGINES[number];
 export type SidebarTab = 'sources' | 'history' | 'settings';
+export interface TextFieldConfig {
+    label?: string;
+    enabled?: boolean;
+    engine?: EditorEngine['id'];
+    language?: Language['id'];
+    wordWrap?: boolean;
+    lineNumbers?: boolean;
+    fontId?: string;
+    indentMode?: IndentMode['id'];
+    spellCheck?: boolean;
+    languageTool?: boolean;
+    minimap?: boolean;
+}
+export type TextFieldConfigs = Record<string, TextFieldConfig>;
 export type TextField = readonly [property: string, label: string, selector?: string];
 export type DiffMark = '' | 'added' | 'removed' | 'placeholder';
 export interface AlignedDiff {
@@ -12,6 +26,12 @@ export interface AlignedDiff {
     oldDisplayText: string;
 }
 export type IndentMode = typeof INDENT_MODES[number];
+
+export interface CustomExtensionField {
+    selector: string;
+    label: string;
+    group: string;
+}
 
 export interface ChangedSource {
     source: TextSource;
@@ -168,13 +188,17 @@ export interface DomRefs {
     statusSelection?: HTMLElement;
     statusIndent?: HTMLButtonElement;
     statusWrap?: HTMLButtonElement;
+    statusLineNumbers?: HTMLButtonElement;
     statusSpellCheck?: HTMLButtonElement;
+    statusLanguageTool?: HTMLButtonElement;
     statusMinimap?: HTMLButtonElement;
     statusLanguage?: HTMLButtonElement;
     statusLanguageMenu?: HTMLDivElement;
     statusEngine?: HTMLButtonElement;
     statusScrollSync?: HTMLButtonElement;
     editorEngine?: HTMLSelectElement;
+    replaceTextFieldEngine?: HTMLSelectElement;
+    editorFont?: HTMLSelectElement;
     statusBranch?: HTMLSelectElement;
     masterScrollbar?: HTMLDivElement;
     masterScrollContent?: HTMLDivElement;

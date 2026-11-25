@@ -5,7 +5,9 @@ import { Popup, POPUP_RESULT } from '../../../../popup.js';
 // @ts-ignore
 import { download } from '../../../../utils.js';
 // @ts-ignore
-import { eventSource, event_types, stopGeneration } from '../../../../../script.js';
+import { uploadFileAttachment } from '../../../../chats.js';
+// @ts-ignore
+import { eventSource, event_types, getRequestHeaders, stopGeneration } from '../../../../../script.js';
 import { createEditor, languageMap } from './vendor/prism-code-editor/index.js';
 import { languages } from './vendor/prism-code-editor/prism/index.js';
 import { defaultCommands } from './vendor/prism-code-editor/extensions/commands/index.js';
@@ -20,13 +22,53 @@ import './vendor/prism-code-editor/prism/languages/json.js';
 import './vendor/prism-code-editor/prism/languages/css.js';
 
 import { NAME, STORAGE, EDITOR_ENGINES, INDENT_MODES, LANGUAGES, SYNC_MODES } from './constants.js';
-import { ChangedSource, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
+import { ChangedSource, CustomExtensionField, DomRefs, EditorEngine, HistoryScope, IndentMode, Language, PrismEditorLike, TextSource, SyncMode, SidebarTab, HistoryCommit } from './types.js';
 import { getCollapsedGroups, getLineDiff, getPromptInspectorPreviousValue, getPromptInspectorSourceId, getSources, setPromptInspectorSnapshot } from './SourceManager.js';
 import { HistoryStore } from './HistoryStore.js';
 import { HistoryPanel } from './HistoryPanel.js';
-import { renderSettingsPanel } from './SettingsPanel.js';
+import { createSettingsWindow, SettingsWindow } from './SettingsWindow.js';
 import { isLorebookGroup, openSourceControlDialog, renderSourceTree } from './SourcePanel.js';
-import { getSetting, setSetting } from './settings.js';
+import { createDomFieldSource, getTextFieldKey, resolveSourceIdForField, TextFieldReplacer } from './TextFieldReplacer.js';
+import {
+    attachLanguageToolToMonaco,
+    attachLanguageToolToPrism,
+    isLanguageToolPluginAvailable,
+    LanguageToolAttachment,
+    probeLanguageToolPlugin,
+    subscribeLanguageToolAvailability,
+} from './LanguageToolClient.js';
+import {
+    BUILTIN_FONTS,
+    discoverAssetFonts,
+    ensureFontLoaded,
+    FONT_FILE_PATTERN,
+    FontOption,
+    getAvailableBuiltinFonts,
+    makeUrlFontOption,
+    MONACO_DEFAULT_FONT,
+    readFileAsBase64,
+    sanitizeUploadFontName,
+} from './FontManager.js';
+import {
+    getEditorFontId,
+    getReplaceTextFieldEngine,
+    getReplaceTextFieldExceptions,
+    getSetting,
+    getTextFieldConfigs,
+    getUploadedFonts,
+    isAutoCollapseSidebarEnabled,
+    isFullJsonHistoryIgnored,
+    isHideNonEditableSourcesEnabled,
+    isLanguageToolEnabled,
+    isLineNumbersEnabled,
+    isMonacoMinimapEnabled,
+    isReplaceTextFieldLineNumbersEnabled,
+    isReplaceTextFieldWordWrapEnabled,
+    isReplaceTextFieldsEnabled,
+    isSpellCheckEnabled,
+    isWordWrapEnabled,
+    setSetting,
+} from './settings.js';
 
 // Disable tag highlighting to prevent misalignment issues
 if (languages.markdown) {
@@ -43,9 +85,6 @@ const getEditorEngine = (): EditorEngine => {
     return EDITOR_ENGINES.find(engine => engine.id === stored) ?? EDITOR_ENGINES[0];
 };
 
-const isSpellCheckEnabled = () => getSetting<boolean>(STORAGE.spellCheck, false);
-const isMonacoMinimapEnabled = () => getSetting<boolean>(STORAGE.monacoMinimap, false);
-const isFullJsonHistoryIgnored = () => getSetting<boolean>(STORAGE.ignoreFullJsonHistory, true);
 const getStoredSourceLanguages = (): Record<string, string> => {
     const stored = getSetting<Record<string, string>>(STORAGE.sourceLanguages, {});
     return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
@@ -187,11 +226,16 @@ export class EveryTextLineEditor {
     currentLanguage: Language = LANGUAGES[0];
     scrollSyncMode: SyncMode = SYNC_MODES[1];
     editorEngine: EditorEngine = EDITOR_ENGINES[0];
+    replaceTextFieldEngine: EditorEngine = EDITOR_ENGINES[0];
+    availableFonts: FontOption[] = [...BUILTIN_FONTS];
+    selectedFontId: string = '';
     dom: DomRefs;
     editor: PrismEditorLike | null;
     oldEditor: PrismEditorLike | null;
     editorReady: Promise<void>;
     monacoEditor: any;
+    editorLanguageTool: LanguageToolAttachment | null;
+    unsubscribeLanguageTool: (() => void) | null;
     monacoSpellcheckers: MonacoSpellchecker[];
     monacoSpellcheckFrame: number | null;
     monacoUserDictionary: Set<string>;
@@ -212,6 +256,7 @@ export class EveryTextLineEditor {
     historyCommit?: HistoryCommit;
     sourceLanguages: Record<string, string>;
     suppressEditorChange: boolean;
+    unsavedPromptActive: boolean;
     trackedSourceGroups: Set<string>;
     sourceWatchTimer: number | null;
     sourceWatchInFlight: boolean;
@@ -224,6 +269,10 @@ export class EveryTextLineEditor {
     lifecycle: AbortController;
     diffScrollBindings: AbortController | null;
     detachedDraftSource: TextSource | null;
+    textFieldReplacer: TextFieldReplacer;
+    settingsWindow: SettingsWindow | null;
+    monacoSpellObservers: MutationObserver[];
+    languageMenuCloseController: AbortController | null;
 
     constructor() {
         this.sources = [];
@@ -231,12 +280,19 @@ export class EveryTextLineEditor {
         this.selectedSourceBaseline = '';
         this.selectedSourceChanged = false;
         this.dirty = false;
+        this.unsavedPromptActive = false;
         this.collapsedGroups = getCollapsedGroups();
         this.dom = {};
         this.editor = null;
         this.oldEditor = null;
         this.editorReady = Promise.resolve();
         this.monacoEditor = null;
+        this.editorLanguageTool = null;
+        this.unsubscribeLanguageTool = subscribeLanguageToolAvailability(() => {
+            this.updateStatusBar();
+            this.textFieldReplacer.updateOptions();
+        });
+        probeLanguageToolPlugin().catch(() => {});
         this.monacoSpellcheckers = [];
         this.monacoSpellcheckFrame = null;
         this.monacoUserDictionary = new Set();
@@ -251,6 +307,9 @@ export class EveryTextLineEditor {
         this.pendingDiffScrollSync = null;
         this.indentMode = getIndentMode();
         this.editorEngine = getEditorEngine();
+        this.replaceTextFieldEngine = getReplaceTextFieldEngine();
+        this.selectedFontId = getEditorFontId();
+        this.availableFonts = [...BUILTIN_FONTS, ...getUploadedFonts()];
         this.selectedSidebarTab = 'sources';
         this.selectedHistoryGroup = '';
         this.historyStore = new HistoryStore();
@@ -269,20 +328,64 @@ export class EveryTextLineEditor {
         this.panelResizeObserver = null;
         const storedSync = getSetting<string>(STORAGE.scrollSync, '');
         this.scrollSyncMode = SYNC_MODES.find(m => m.id === storedSync) ?? SYNC_MODES[1];
+        this.monacoSpellObservers = [];
+        this.languageMenuCloseController = null;
+        this.settingsWindow = null;
+        this.textFieldReplacer = new TextFieldReplacer({
+            getEngine: () => this.replaceTextFieldEngine,
+            getWordWrap: () => isReplaceTextFieldWordWrapEnabled(),
+            getLineNumbers: () => isReplaceTextFieldLineNumbersEnabled(),
+            getFontFamily: () => this.getActiveFontFamily(),
+            getFontId: () => this.selectedFontId,
+            getFonts: () => this.availableFonts,
+            initialFieldConfigs: getTextFieldConfigs(),
+            onFieldConfigsChange: configs => setSetting(STORAGE.textFieldConfigs, configs),
+            onOpenSettings: key => this.openSettingsWindow(key),
+            onOpenField: textarea => {
+                this.openForFieldId(textarea.id, textarea).catch(error => console.error(`[${NAME}] Failed to open field in editor`, error));
+            },
+            getIndentMode: () => this.indentMode,
+            getSpellCheck: () => isSpellCheckEnabled(),
+            getMonacoMinimap: () => isMonacoMinimapEnabled(),
+            attachAutocomplete: (editorTextarea) => {
+                const controller = new AbortController();
+                setSlashCommandAutoComplete(editorTextarea, true).then((autocomplete) => {
+                    if (controller.signal.aborted) return;
+                    editorTextarea.addEventListener('keydown', (event) => autocomplete.handleKeyDown(event), {
+                        capture: true,
+                        signal: controller.signal,
+                    });
+                }).catch(() => {});
+                return () => controller.abort();
+            },
+            loadMonaco,
+        });
     }
 
     async inject() {
         this.renderDrawer();
         this.addWandToggleButton();
         await this.editorReady;
+        await this.refreshFonts();
+        await this.applyEditorFont();
         await this.refreshSources();
         this.startSourceEventListeners();
         this.startSourceWatcher();
+        await this.textFieldReplacer.setExceptions(getReplaceTextFieldExceptions());
+        if (isReplaceTextFieldsEnabled()) {
+            await this.textFieldReplacer.setEnabled(true);
+        }
     }
 
     destroy() {
         this.lifecycle.abort();
         this.diffScrollBindings?.abort();
+        this.closeLanguageMenu();
+        this.settingsWindow?.destroy();
+        this.settingsWindow = null;
+        this.textFieldReplacer.destroy();
+        this.monacoSpellObservers.forEach(observer => observer.disconnect());
+        this.monacoSpellObservers = [];
         this.stopSourceWatcher();
         this.stopSourceEventListeners();
         if (this.runtimeSourceRefreshTimer !== null) {
@@ -291,6 +394,10 @@ export class EveryTextLineEditor {
         }
         this.closeMonacoDiff({ syncValue: true });
         this.disposeMonacoSpellcheckers();
+        this.unsubscribeLanguageTool?.();
+        this.unsubscribeLanguageTool = null;
+        this.editorLanguageTool?.dispose();
+        this.editorLanguageTool = null;
         this.panelResizeObserver?.disconnect();
         this.panelResizeObserver = null;
         this.editor?.dispose?.();
@@ -360,11 +467,13 @@ export class EveryTextLineEditor {
 
     handleDocumentClick(event) {
         if (!this.dirty || !this.dom.root.classList.contains('openDrawer')) return;
+        // When docked in ProbablyTooManyTabs, clicking outside the panel does not close the tab.
+        if (this.dom.root?.closest?.('.ptmt-pane-grid, .ptmt-pane, .ptmt-tab-panel')) return;
         const target = event.target;
         if (!(target instanceof Node)) return;
         if (this.dom.drawer.contains(target)) return;
         if (this.dom.root?.contains(target)) return;
-        if (target instanceof Element && target.closest?.('.popup, dialog, .dialogue_popup')) return;
+        if (target instanceof Element && target.closest?.('.popup, dialog, .dialogue_popup, .etle--statusDropup, .etle--ltPanel')) return;
 
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -468,8 +577,19 @@ export class EveryTextLineEditor {
         tree.classList.add('etle--tree');
         sourcesPanel.append(sourceSearch);
         sourcesPanel.append(tree);
+        const hideNonEditable = isHideNonEditableSourcesEnabled();
+        const hideNonEditableBtn = this.makeIconButton(
+            hideNonEditable ? 'fa-eye-slash' : 'fa-eye',
+            hideNonEditable ? 'Hiding non-editable items (click to show all)' : 'Showing non-editable items (click to hide)',
+            () => this.setHideNonEditableSources(!isHideNonEditableSourcesEnabled()),
+        );
+        hideNonEditableBtn.classList.toggle('etle--activeButton', hideNonEditable);
+        hideNonEditableBtn.setAttribute('aria-pressed', String(hideNonEditable));
+        this.dom.hideNonEditableBtn = hideNonEditableBtn;
+
         sourcesToolbar.append(addSource);
         sourcesToolbar.append(inspectBtn);
+        sourcesToolbar.append(hideNonEditableBtn);
         sourcesPanel.append(sourcesToolbar);
 
         const historyPanel = document.createElement('section');
@@ -477,8 +597,6 @@ export class EveryTextLineEditor {
         historyPanel.classList.add('etle--tabPanel', 'etle--historyPanel');
         historyPanel.dataset.tab = 'history';
         sidebarBody.append(historyPanel);
-
-        sidebarBody.append(renderSettingsPanel(this));
 
         this.setSidebarTab(this.selectedSidebarTab);
 
@@ -542,6 +660,7 @@ export class EveryTextLineEditor {
         this.dom.revert = this.makeTextButton('', 'fa-undo', () => this.revert());
         this.dom.revert.title = 'Revert to saved text';
         this.dom.apply = this.makeTextButton('', 'fa-check', () => this.apply());
+        this.dom.apply.classList.add('etle--applyButton');
         this.dom.apply.title = 'Apply and save (Ctrl+S)';
 
         actionsRight.append(this.dom.diff, this.dom.revert, this.dom.apply, this.makeIconButton('fa-times', 'Close editor', () => this.close().catch((error) => console.error(`[${NAME}] Failed to close editor`, error))));
@@ -771,6 +890,10 @@ export class EveryTextLineEditor {
     }
 
     setSidebarTab(tab: SidebarTab) {
+        if (tab === 'settings') {
+            this.openSettingsWindow();
+            return;
+        }
         this.selectedSidebarTab = tab;
         this.dom.sidebarTabs?.querySelectorAll<HTMLButtonElement>('.etle--sidebarTab').forEach(button => {
             button.classList.toggle('etle--activeTab', button.dataset.tab === tab);
@@ -779,6 +902,12 @@ export class EveryTextLineEditor {
             panel.hidden = panel.dataset.tab !== tab;
         });
         if (tab === 'history') this.refreshHistory();
+    }
+
+    openSettingsWindow(fieldKey?: string) {
+        this.settingsWindow ??= createSettingsWindow(this);
+        this.settingsWindow.show(fieldKey);
+        this.updateStatusBar();
     }
 
     setSidebarCollapsed(collapsed: boolean) {
@@ -868,22 +997,24 @@ export class EveryTextLineEditor {
         this.dom.icon?.classList.toggle('drawerPinnedOpen', !!isLocked);
     }
 
-    togglePromptInspector() {
-        const enabled = !getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
-        setSetting(STORAGE.promptInspectorEnabled, enabled);
+    syncPromptInspectorUi() {
+        const enabled = getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
         const btn = this.dom.inspectPromptsBtn;
         if (btn) {
             const icon = btn.querySelector('span.fa-solid');
             const label = btn.querySelectorAll('span')[1];
-            if (icon) {
-                icon.classList.toggle('fa-bug', !enabled);
-                icon.classList.toggle('fa-bug-slash', enabled);
-            }
+            if (icon) icon.className = `fa-solid fa-fw ${enabled ? 'fa-bug-slash' : 'fa-bug'}`;
             if (label) label.textContent = enabled ? 'Stop Inspecting' : 'Inspect Prompts';
             btn.classList.toggle('etle--inspectActive', enabled);
         }
-        globalThis.toastr?.info?.(`Prompt inspection is now ${enabled ? 'enabled' : 'disabled'}`);
         this.syncWandToggleButton?.();
+    }
+
+    togglePromptInspector() {
+        const enabled = !getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
+        setSetting(STORAGE.promptInspectorEnabled, enabled);
+        this.syncPromptInspectorUi();
+        globalThis.toastr?.info?.(`Prompt inspection is now ${enabled ? 'enabled' : 'disabled'}`);
         this.renderTree();
     }
 
@@ -891,13 +1022,8 @@ export class EveryTextLineEditor {
         this.dom.wandButton?.remove();
 
         const getEnabledState = () => getSetting<boolean>(STORAGE.promptInspectorEnabled, false);
-        const enabledText = 'Stop Inspecting';
-        const disabledText = 'Inspect Prompts';
-        const enabledIcon = 'fa-solid fa-bug-slash';
-        const disabledIcon = 'fa-solid fa-bug';
-
-        const getIcon = () => getEnabledState() ? enabledIcon : disabledIcon;
-        const getText = () => getEnabledState() ? enabledText : disabledText;
+        const getIcon = () => getEnabledState() ? 'fa-solid fa-bug-slash' : 'fa-solid fa-bug';
+        const getText = () => getEnabledState() ? 'Stop Inspecting' : 'Inspect Prompts';
 
         const launchButton = document.createElement('div');
         this.dom.wandButton = launchButton;
@@ -905,11 +1031,11 @@ export class EveryTextLineEditor {
         launchButton.classList.add('list-group-item', 'flex-container', 'flexGap5', 'interactable');
         launchButton.tabIndex = 0;
         launchButton.title = 'Toggle prompt inspection';
-        
+
         const icon = document.createElement('i');
         icon.className = getIcon();
         launchButton.appendChild(icon);
-        
+
         const textSpan = document.createElement('span');
         textSpan.textContent = getText();
         launchButton.appendChild(textSpan);
@@ -924,39 +1050,11 @@ export class EveryTextLineEditor {
         container.tabIndex = 0;
         container.appendChild(launchButton);
 
-        const updateToolbarButton = () => {
-            const isEnabled = getEnabledState();
-            const btn = this.dom.inspectPromptsBtn;
-            if (btn) {
-                const bugIcon = btn.querySelector('span.fa-solid');
-                const text = btn.querySelectorAll('span')[1];
-                if (bugIcon) {
-                    bugIcon.className = `fa-solid fa-fw ${isEnabled ? 'fa-bug-slash' : 'fa-bug'}`;
-                }
-                if (text) text.textContent = isEnabled ? 'Stop Inspecting' : 'Inspect Prompts';
-                btn.classList.toggle('etle--inspectActive', isEnabled);
-            }
-        };
-
-        const toggle = () => {
-            const newState = !getEnabledState();
-            setSetting(STORAGE.promptInspectorEnabled, newState);
-            globalThis.toastr?.info?.(`Prompt inspection is now ${newState ? 'enabled' : 'disabled'}`);
-            
-            icon.className = getIcon();
-            textSpan.textContent = getText();
-
-            updateToolbarButton();
-            this.renderTree();
-        };
-
-        launchButton.addEventListener('click', toggle);
+        launchButton.addEventListener('click', () => this.togglePromptInspector());
 
         this.syncWandToggleButton = () => {
-            if (launchButton && icon && textSpan) {
-                icon.className = getIcon();
-                textSpan.textContent = getText();
-            }
+            icon.className = getIcon();
+            textSpan.textContent = getText();
         };
     }
 
@@ -1072,23 +1170,39 @@ export class EveryTextLineEditor {
         const wrap = document.createElement('button');
         this.dom.statusWrap = wrap;
         wrap.type = 'button';
-        wrap.classList.add('etle--statusButton');
+        wrap.classList.add('etle--statusButton', 'etle--statusIconButton', 'fa-solid', 'fa-fw', 'fa-align-left');
         wrap.title = 'Toggle word wrap';
-        wrap.addEventListener('click', () => this.setWordWrap(!getSetting<boolean>(STORAGE.wordWrap, true)));
+        wrap.addEventListener('click', () => this.setWordWrap(!isWordWrapEnabled()));
         right.append(wrap);
+
+        const lineNumbers = document.createElement('button');
+        this.dom.statusLineNumbers = lineNumbers;
+        lineNumbers.type = 'button';
+        lineNumbers.classList.add('etle--statusButton', 'etle--statusIconButton', 'fa-solid', 'fa-fw', 'fa-list-ol');
+        lineNumbers.title = 'Toggle line numbers';
+        lineNumbers.addEventListener('click', () => this.setLineNumbers(!isLineNumbersEnabled()));
+        right.append(lineNumbers);
 
         const spell = document.createElement('button');
         this.dom.statusSpellCheck = spell;
         spell.type = 'button';
-        spell.classList.add('etle--statusButton');
+        spell.classList.add('etle--statusButton', 'etle--statusIconButton', 'fa-solid', 'fa-fw', 'fa-spell-check');
         spell.title = 'Toggle spell check';
         spell.addEventListener('click', () => this.setSpellCheck(!isSpellCheckEnabled()));
         right.append(spell);
 
+        const languageTool = document.createElement('button');
+        this.dom.statusLanguageTool = languageTool;
+        languageTool.type = 'button';
+        languageTool.classList.add('etle--statusButton', 'etle--statusIconButton', 'fa-solid', 'fa-fw', 'fa-language');
+        languageTool.title = 'Toggle LanguageTool';
+        languageTool.addEventListener('click', () => this.setLanguageTool(!isLanguageToolEnabled()));
+        right.append(languageTool);
+
         const minimap = document.createElement('button');
         this.dom.statusMinimap = minimap;
         minimap.type = 'button';
-        minimap.classList.add('etle--statusButton');
+        minimap.classList.add('etle--statusButton', 'etle--statusIconButton', 'fa-solid', 'fa-fw', 'fa-map');
         minimap.title = 'Toggle Monaco minimap';
         minimap.addEventListener('click', () => this.setMonacoMinimap(!isMonacoMinimapEnabled()));
         right.append(minimap);
@@ -1115,7 +1229,7 @@ export class EveryTextLineEditor {
         const sync = document.createElement('button');
         this.dom.statusScrollSync = sync;
         sync.type = 'button';
-        sync.classList.add('etle--statusButton');
+        sync.classList.add('etle--statusButton', 'etle--statusIconButton', 'fa-solid', 'fa-fw', 'fa-link');
         sync.title = 'Cycle scroll sync mode';
         sync.addEventListener('click', () => this.cycleScrollSync());
         right.append(sync);
@@ -1193,7 +1307,7 @@ export class EveryTextLineEditor {
             {
                 value,
                 language: 'markdown',
-                lineNumbers: true,
+                lineNumbers: isLineNumbersEnabled(),
                 readOnly,
                 insertSpaces: this.indentMode.insertSpaces,
                 tabSize: this.indentMode.tabSize,
@@ -1214,6 +1328,20 @@ export class EveryTextLineEditor {
         );
 
         this.applySpellCheckToTextArea(editor.textarea);
+        let languageTool: LanguageToolAttachment | null = null;
+        if (!readOnly) {
+            this.editorLanguageTool?.dispose();
+            languageTool = attachLanguageToolToPrism(editor, host, {
+                getRequestHeaders: () => getRequestHeaders?.() ?? {},
+            });
+            languageTool.setEnabled(isLanguageToolEnabled());
+            this.editorLanguageTool = languageTool;
+            const origSetOptions = editor.setOptions.bind(editor);
+            editor.setOptions = (options: Record<string, any>) => {
+                origSetOptions(options);
+                if (typeof options?.value === 'string') languageTool?.notifyValueChanged();
+            };
+        }
         editor.textarea.addEventListener('keydown', (event) => this.handleEditorKeyDown(event), { capture: true });
         setSlashCommandAutoComplete(editor.textarea, true).then((autocomplete) => {
             editor.textarea.addEventListener('keydown', (event) => autocomplete.handleKeyDown(event), { capture: true });
@@ -1235,7 +1363,11 @@ export class EveryTextLineEditor {
             if (document.activeElement === editor.textarea) syncCaret();
         }, { signal: documentListeners.signal });
 
-        (editor as PrismEditorLike).dispose = () => documentListeners.abort();
+        (editor as PrismEditorLike).dispose = () => {
+            documentListeners.abort();
+            languageTool?.dispose();
+            if (this.editorLanguageTool === languageTool) this.editorLanguageTool = null;
+        };
         return editor;
     }
 
@@ -1252,17 +1384,28 @@ export class EveryTextLineEditor {
         container.append(focusProxy);
 
         const model = monaco.editor.createModel(value, this.getMonacoLanguageId());
+        const activeFontFamily = this.getActiveFontFamily();
         const monacoEditor = monaco.editor.create(container, {
             model,
             readOnly,
             automaticLayout: true,
             minimap: { enabled: isMonacoMinimapEnabled() && !(this.diffOpen && this.dom.root?.classList.contains('etle--monacoDiffMode')) },
-            lineNumbers: 'on',
+            lineNumbers: isLineNumbersEnabled() ? 'on' : 'off',
             scrollBeyondLastLine: false,
             wordWrap: getSetting<boolean>(STORAGE.wordWrap, true) ? 'on' : 'off',
+            ...(activeFontFamily ? { fontFamily: activeFontFamily } : {}),
             theme: 'vs-dark',
         });
         this.monacoEditor = monacoEditor;
+        let languageTool: LanguageToolAttachment | null = null;
+        if (!readOnly) {
+            this.editorLanguageTool?.dispose();
+            languageTool = attachLanguageToolToMonaco(monaco, monacoEditor, host, {
+                getRequestHeaders: () => getRequestHeaders?.() ?? {},
+            });
+            languageTool.setEnabled(isLanguageToolEnabled());
+            this.editorLanguageTool = languageTool;
+        }
         this.applySpellCheckToMonaco(container);
         this.observeMonacoSpellCheck(container);
         this.setupMonacoSpellchecker(monacoEditor).catch((error) => console.warn(`[${NAME}] Failed to start Monaco spellcheck`, error));
@@ -1300,12 +1443,16 @@ export class EveryTextLineEditor {
             setOptions: (options: Record<string, any>) => {
                 if (typeof options.value === 'string' && options.value !== model.getValue()) {
                     model.setValue(options.value);
+                    languageTool?.notifyValueChanged();
                 }
                 if (typeof options.readOnly === 'boolean') {
                     monacoEditor.updateOptions({ readOnly: options.readOnly });
                 }
                 if (typeof options.wordWrap === 'boolean') {
                     monacoEditor.updateOptions({ wordWrap: options.wordWrap ? 'on' : 'off' });
+                }
+                if (typeof options.lineNumbers === 'boolean') {
+                    monacoEditor.updateOptions({ lineNumbers: options.lineNumbers ? 'on' : 'off' });
                 }
                 if (typeof options.minimap === 'boolean') {
                     monacoEditor.updateOptions({ minimap: { enabled: options.minimap } });
@@ -1334,6 +1481,8 @@ export class EveryTextLineEditor {
             },
             dispose: () => {
                 this.disposeMonacoSpellcheckers();
+                languageTool?.dispose();
+                if (this.editorLanguageTool === languageTool) this.editorLanguageTool = null;
                 if (this.monacoEditor === monacoEditor) this.monacoEditor = null;
                 monacoEditor.dispose();
                 model.dispose();
@@ -1370,7 +1519,7 @@ export class EveryTextLineEditor {
             {
                 value: '',
                 language: 'markdown',
-                lineNumbers: true,
+                lineNumbers: isLineNumbersEnabled(),
                 readOnly: true,
                 insertSpaces: this.indentMode.insertSpaces,
                 tabSize: this.indentMode.tabSize,
@@ -1518,10 +1667,17 @@ export class EveryTextLineEditor {
             event_types.CHARACTER_RENAMED,
             event_types.CHARACTER_PAGE_LOADED,
             'groupSelected',
+            ...('OAI_PRESET_CHANGED_AFTER' in event_types ? [event_types.OAI_PRESET_CHANGED_AFTER] : []),
         ];
         for (const event of events) {
             eventSource.on(event, refresh);
             this.sourceEventHandlers.push([event, refresh]);
+        }
+
+        if ('SETTINGS_UPDATED' in event_types) {
+            const reloadReplacedTextFields = () => this.textFieldReplacer.reloadAll();
+            eventSource.on(event_types.SETTINGS_UPDATED, reloadReplacedTextFields);
+            this.sourceEventHandlers.push([event_types.SETTINGS_UPDATED, reloadReplacedTextFields]);
         }
 
         const inspectChatPrompt = (data) => this.inspectGeneratedPrompt(data, 'chat');
@@ -1651,6 +1807,8 @@ export class EveryTextLineEditor {
     }
 
     async refreshSourcesFromRuntime() {
+        this.textFieldReplacer.reloadAll();
+        this.textFieldReplacer.scan().catch((error) => console.warn(`[${NAME}] Failed to scan inline textfields`, error));
         const selectedCurrentCard = this.selectedSource?.id.startsWith('current-character-card:') ?? false;
         if (this.dirty && !(selectedCurrentCard && this.selectedSourceChanged)) {
             this.updateStatusBar();
@@ -1710,6 +1868,16 @@ export class EveryTextLineEditor {
         }
     }
 
+    async setCustomExtensionFields(fields: CustomExtensionField[], selectedGroups: string[]) {
+        setSetting(STORAGE.customExtensionFields, fields);
+        const nextGroups = new Set(selectedGroups);
+        for (const field of fields) {
+            nextGroups.add(field.group || 'Extension Fields');
+        }
+        await this.refreshSources(true);
+        await this.setTrackedSourceGroups([...nextGroups]);
+    }
+
     clearSelectedSource(title: string, detail: string) {
         this.selectedSource = null;
         this.selectedSourceBaseline = '';
@@ -1754,6 +1922,7 @@ export class EveryTextLineEditor {
         }
         if (source.group.startsWith('Data Bank') && !/\.(md|markdown|json|css|ya?ml)$/.test(label)) return textLanguage;
         if (source.group.includes('Connection Profiles')) return jsonLanguage;
+        if (source.group === 'Custom Parameters' && source.meta?.includes(', object)')) return jsonLanguage;
         if (source.group.includes('Character Card') && label.includes('json')) return jsonLanguage;
         if (id.includes('custom_include_body') || id.includes('custom_exclude_body') || id.includes('custom_include_headers')) return jsonLanguage;
         if (label.includes('json')) return jsonLanguage;
@@ -1806,6 +1975,8 @@ export class EveryTextLineEditor {
 
     async selectSource(id, { force = false } = {}) {
         if (!force && this.selectedSource?.id === id) return;
+        const target = this.sources.find(item => item.id === id);
+        if (!target || target.selectable === false) return;
         if (!force && this.dirty) {
             const choice = await this.confirmUnsavedSourceChange('switch');
             if (choice === 'cancel') return;
@@ -1817,7 +1988,7 @@ export class EveryTextLineEditor {
                 this.updateDirty(false);
             }
         }
-        const source = this.sources.find(item => item.id === id);
+        const source = this.sources.find(item => item.id === id) ?? target;
         if (!source || source.selectable === false) return;
 
         this.selectedSource = source;
@@ -1940,31 +2111,99 @@ export class EveryTextLineEditor {
         });
     }
 
-    async confirmUnsavedSourceChange(action = 'switch') {
+    async confirmUnsavedSourceChange(action = 'switch'): Promise<'save' | 'discard' | 'cancel'> {
+        if (this.unsavedPromptActive) return 'cancel';
+        this.unsavedPromptActive = true;
         const actionText = action === 'close'
             ? 'closing the editor'
             : action === 'load'
                 ? 'loading this version'
-                : 'switching sources';
-        const result = await Popup.show.confirm(
-            'Unsaved changes',
-            `Save changes before ${actionText}?`,
-            {
-                okButton: 'Save Changes',
-                cancelButton: 'Cancel',
-                customButtons: [{
-                    text: 'Discard Changes',
-                    result: POPUP_RESULT.CUSTOM1,
-                    icon: 'fa-trash-can',
-                    classes: ['redWarningBG'],
-                }],
-                defaultResult: POPUP_RESULT.AFFIRMATIVE,
-            },
-        );
+                : action === 'switch branch'
+                    ? 'switching branches'
+                    : 'switching sources';
+        const canSave = Boolean(this.selectedSource && !this.selectedSource.readonly);
+        const sourceLabel = this.selectedSource?.label;
 
-        if (result === POPUP_RESULT.AFFIRMATIVE) return 'save';
-        if (result === POPUP_RESULT.CUSTOM1) return 'discard';
-        return 'cancel';
+        try {
+            if (typeof document === 'undefined' || typeof HTMLDialogElement === 'undefined') {
+                return 'cancel';
+            }
+            return await new Promise<'save' | 'discard' | 'cancel'>((resolve) => {
+                const dialog = document.createElement('dialog');
+                dialog.classList.add('etle--unsavedDialog');
+                dialog.setAttribute('aria-label', 'Unsaved changes');
+
+                const header = document.createElement('header');
+                header.classList.add('etle--unsavedDialogHeader');
+                const title = document.createElement('h3');
+                title.innerHTML = '<span class="fa-solid fa-fw fa-triangle-exclamation" aria-hidden="true"></span><span>Unsaved changes</span>';
+                header.append(title);
+
+                const body = document.createElement('div');
+                body.classList.add('etle--unsavedDialogBody');
+                const message = document.createElement('p');
+                message.textContent = sourceLabel
+                    ? `You have unsaved changes in "${sourceLabel}". ${canSave ? 'Save' : 'Discard'} them before ${actionText}?`
+                    : `${canSave ? 'Save' : 'Discard'} your unsaved changes before ${actionText}?`;
+                body.append(message);
+                if (this.selectedSourceChanged) {
+                    const note = document.createElement('small');
+                    note.classList.add('etle--unsavedDialogNote');
+                    note.textContent = 'The underlying source also changed since you started editing.';
+                    body.append(note);
+                }
+
+                const actions = document.createElement('footer');
+                actions.classList.add('etle--unsavedDialogActions');
+                const rightActions = document.createElement('div');
+                rightActions.classList.add('etle--unsavedDialogActionsRight');
+
+                let settled = false;
+                const finish = (choice: 'save' | 'discard' | 'cancel') => {
+                    if (settled) return;
+                    settled = true;
+                    if (dialog.open) dialog.close();
+                    dialog.remove();
+                    resolve(choice);
+                };
+
+                const discardBtn = this.makeTextButton('Discard', 'fa-trash-can', () => finish('discard'));
+                discardBtn.classList.add('etle--unsavedDiscardBtn');
+                const cancelBtn = this.makeTextButton('Cancel', 'fa-xmark', () => finish('cancel'));
+                rightActions.append(cancelBtn);
+
+                let saveBtn: HTMLButtonElement | null = null;
+                if (canSave) {
+                    saveBtn = this.makeTextButton('Save Changes', 'fa-check', () => finish('save'));
+                    saveBtn.classList.add('etle--unsavedSaveBtn');
+                    rightActions.append(saveBtn);
+                }
+
+                actions.append(discardBtn, rightActions);
+                dialog.append(header, body, actions);
+
+                dialog.addEventListener('cancel', (event) => {
+                    event.preventDefault();
+                    finish('cancel');
+                });
+                dialog.addEventListener('keydown', (event) => {
+                    if (event.key === 'Escape') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        finish('cancel');
+                    }
+                });
+                dialog.addEventListener('click', (event) => {
+                    if (event.target === dialog) finish('cancel');
+                });
+
+                document.body.append(dialog);
+                dialog.showModal();
+                (saveBtn ?? cancelBtn).focus();
+            });
+        } finally {
+            this.unsavedPromptActive = false;
+        }
     }
 
     setEditorValue(value) {
@@ -2058,6 +2297,16 @@ export class EveryTextLineEditor {
         this.updateStatusBar();
     }
 
+    setLineNumbers(enabled: boolean) {
+        setSetting(STORAGE.lineNumbers, enabled);
+        this.editor?.setOptions({ lineNumbers: enabled });
+        this.oldEditor?.setOptions({ lineNumbers: enabled });
+        if (this.monacoDiffEditor) {
+            this.monacoDiffEditor.updateOptions({ lineNumbers: enabled ? 'on' : 'off' });
+        }
+        this.updateStatusBar();
+    }
+
     setSpellCheck(enabled: boolean) {
         setSetting(STORAGE.spellCheck, enabled);
         this.applySpellCheckToTextArea(this.editor?.textarea);
@@ -2065,6 +2314,7 @@ export class EveryTextLineEditor {
         this.applySpellCheckToMonaco(this.editor?.container);
         this.applySpellCheckToMonaco(this.dom.monacoDiffHost);
         this.editor?.setOptions({ spellCheck: enabled });
+        this.textFieldReplacer.updateOptions();
         if (enabled) {
             this.rebuildMonacoSpellcheckers().catch((error) => console.warn(`[${NAME}] Failed to start Monaco spellcheck`, error));
         } else {
@@ -2073,9 +2323,16 @@ export class EveryTextLineEditor {
         this.updateStatusBar();
     }
 
+    setLanguageTool(enabled: boolean) {
+        setSetting(STORAGE.languageTool, enabled);
+        this.editorLanguageTool?.setEnabled(enabled);
+        this.updateStatusBar();
+    }
+
     setMonacoMinimap(enabled: boolean) {
         setSetting(STORAGE.monacoMinimap, enabled);
         this.applyMonacoMinimapOption();
+        this.textFieldReplacer.updateOptions();
         this.updateStatusBar();
         requestAnimationFrame(() => {
             this.editor?.update?.();
@@ -2092,6 +2349,134 @@ export class EveryTextLineEditor {
     setAutoCollapseSidebar(enabled: boolean) {
         setSetting(STORAGE.autoCollapseSidebar, enabled);
         this.updateStatusBar();
+    }
+
+    setHideNonEditableSources(enabled: boolean) {
+        setSetting(STORAGE.hideNonEditableSources, enabled);
+        const btn = this.dom.hideNonEditableBtn as HTMLButtonElement | undefined;
+        if (btn) {
+            btn.classList.toggle('fa-eye-slash', enabled);
+            btn.classList.toggle('fa-eye', !enabled);
+            btn.classList.toggle('etle--activeButton', enabled);
+            btn.setAttribute('aria-pressed', String(enabled));
+            btn.title = enabled ? 'Hiding non-editable items (click to show all)' : 'Showing non-editable items (click to hide)';
+        }
+        this.renderTree();
+        this.updateStatusBar();
+    }
+
+    async setReplaceTextFields(enabled: boolean) {
+        setSetting(STORAGE.replaceTextFields, enabled);
+        await this.textFieldReplacer.setEnabled(enabled);
+        this.updateStatusBar();
+    }
+
+    setReplaceTextFieldLineNumbers(enabled: boolean) {
+        setSetting(STORAGE.replaceTextFieldLineNumbers, enabled);
+        this.textFieldReplacer.updateOptions();
+        this.updateStatusBar();
+    }
+
+    setReplaceTextFieldWordWrap(enabled: boolean) {
+        setSetting(STORAGE.replaceTextFieldWordWrap, enabled);
+        this.textFieldReplacer.updateOptions();
+        this.updateStatusBar();
+    }
+
+    getActiveFontOption(): FontOption {
+        return this.availableFonts.find(font => font.id === this.selectedFontId) ?? BUILTIN_FONTS[0];
+    }
+
+    getActiveFontFamily(): string {
+        return this.getActiveFontOption().family;
+    }
+
+    syncFontSelectOptions() {
+        const select = this.dom.editorFont;
+        if (!select) return;
+        select.innerHTML = '';
+        for (const font of this.availableFonts) {
+            const option = document.createElement('option');
+            option.value = font.id;
+            option.textContent = font.label;
+            select.append(option);
+        }
+        select.value = this.getActiveFontOption().id;
+    }
+
+    async refreshFonts() {
+        const assetFonts = await discoverAssetFonts(() => getRequestHeaders?.() ?? {});
+        const uploaded = getUploadedFonts();
+        const merged = new Map<string, FontOption>();
+        for (const font of getAvailableBuiltinFonts(this.selectedFontId)) merged.set(font.id, font);
+        for (const font of assetFonts) merged.set(font.id, font);
+        for (const font of uploaded) {
+            if (!merged.has(font.id)) merged.set(font.id, font);
+        }
+        this.availableFonts = [...merged.values()];
+        this.syncFontSelectOptions();
+    }
+
+    async setEditorFont(fontId: string) {
+        this.selectedFontId = fontId;
+        setSetting(STORAGE.editorFont, fontId);
+        await this.applyEditorFont();
+        this.syncFontSelectOptions();
+    }
+
+    async uploadFontFile(file: File) {
+        if (!FONT_FILE_PATTERN.test(file.name)) {
+            globalThis.toastr?.warning?.('Unsupported font format. Use .woff2, .woff, .ttf, or .otf.');
+            return;
+        }
+        const base64 = await readFileAsBase64(file);
+        const safeName = sanitizeUploadFontName(file.name);
+        const uploadedUrl = await uploadFileAttachment(safeName, base64);
+        if (!uploadedUrl) {
+            globalThis.toastr?.error?.(`Failed to upload font "${file.name}".`);
+            return;
+        }
+        const option = makeUrlFontOption('user-file', String(uploadedUrl));
+        const existing = getUploadedFonts().filter(item => item.id !== option.id);
+        setSetting(STORAGE.uploadedFonts, [...existing, option]);
+        await this.refreshFonts();
+        await this.setEditorFont(option.id);
+        globalThis.toastr?.success?.(`Loaded font "${option.label}"`);
+    }
+
+    async applyEditorFont() {
+        const option = this.getActiveFontOption();
+        try {
+            await ensureFontLoaded(option);
+        } catch (error) {
+            console.warn(`[${NAME}] Failed to load custom font "${option.label}"`, error);
+            globalThis.toastr?.warning?.(`Could not load font "${option.label}".`);
+        }
+        const family = option.family;
+        if (this.dom.root) {
+            if (family) this.dom.root.style.setProperty('--etle-editor-font', family);
+            else this.dom.root.style.removeProperty('--etle-editor-font');
+        }
+        const monacoFont = family || MONACO_DEFAULT_FONT;
+        this.monacoEditor?.updateOptions?.({ fontFamily: monacoFont });
+        this.monacoDiffEditor?.getOriginalEditor?.()?.updateOptions?.({ fontFamily: monacoFont });
+        this.monacoDiffEditor?.getModifiedEditor?.()?.updateOptions?.({ fontFamily: monacoFont });
+        globalThis.monaco?.editor?.remeasureFonts?.();
+        this.textFieldReplacer.updateOptions();
+    }
+
+    async setReplaceTextFieldEngine(engine: EditorEngine) {
+        if (engine.id === this.replaceTextFieldEngine.id) return;
+        this.replaceTextFieldEngine = engine;
+        setSetting(STORAGE.replaceTextFieldEngine, engine.id);
+        if (this.dom.replaceTextFieldEngine) this.dom.replaceTextFieldEngine.value = engine.id;
+        await this.textFieldReplacer.setEngine(engine);
+        this.updateStatusBar();
+    }
+
+    async setReplaceTextFieldExceptions(raw: string) {
+        setSetting(STORAGE.replaceTextFieldExceptions, raw);
+        await this.textFieldReplacer.setExceptions(raw);
     }
 
     isSourceIgnoredForHistory(source?: TextSource | null): boolean {
@@ -2139,6 +2524,7 @@ export class EveryTextLineEditor {
         root.dataset.etleSpellObserver = '1';
         const observer = new MutationObserver(() => this.applySpellCheckToMonaco(root));
         observer.observe(root, { childList: true, subtree: true });
+        this.monacoSpellObservers.push(observer);
     }
 
     async setupMonacoSpellchecker(monacoEditor?: any) {
@@ -2241,6 +2627,7 @@ export class EveryTextLineEditor {
             insertSpaces: this.indentMode.insertSpaces,
             tabSize: this.indentMode.tabSize,
         });
+        this.textFieldReplacer.updateOptions();
         this.updateStatusBar();
     }
 
@@ -2311,8 +2698,12 @@ export class EveryTextLineEditor {
             if (event.target instanceof Node && (menu.contains(event.target) || anchor.contains(event.target))) return;
             this.closeLanguageMenu();
         };
-        menu.dataset.closeListener = '1';
-        setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
+        this.languageMenuCloseController?.abort();
+        this.languageMenuCloseController = new AbortController();
+        const { signal } = this.languageMenuCloseController;
+        setTimeout(() => {
+            if (!signal.aborted) document.addEventListener('click', close, { signal });
+        }, 0);
     }
 
     positionLanguageMenu() {
@@ -2328,6 +2719,8 @@ export class EveryTextLineEditor {
     }
 
     closeLanguageMenu() {
+        this.languageMenuCloseController?.abort();
+        this.languageMenuCloseController = null;
         this.dom.statusLanguageMenu?.remove();
         this.dom.statusLanguageMenu = undefined;
     }
@@ -2611,20 +3004,46 @@ export class EveryTextLineEditor {
             this.dom.statusIndent.textContent = this.indentMode.label;
         }
         if (this.dom.statusWrap) {
-            this.dom.statusWrap.textContent = wrapEnabled ? 'Wrap: On' : 'Wrap: Off';
+            const label = wrapEnabled ? 'Word Wrap: On' : 'Word Wrap: Off';
+            this.dom.statusWrap.title = label;
+            this.dom.statusWrap.setAttribute('aria-label', label);
+            this.dom.statusWrap.setAttribute('aria-pressed', String(wrapEnabled));
             this.dom.statusWrap.classList.toggle('etle--statusActive', wrapEnabled);
         }
+        if (this.dom.statusLineNumbers) {
+            const lineNumbersEnabled = isLineNumbersEnabled();
+            const label = lineNumbersEnabled ? 'Line Numbers: On' : 'Line Numbers: Off';
+            this.dom.statusLineNumbers.title = label;
+            this.dom.statusLineNumbers.setAttribute('aria-label', label);
+            this.dom.statusLineNumbers.setAttribute('aria-pressed', String(lineNumbersEnabled));
+            this.dom.statusLineNumbers.classList.toggle('etle--statusActive', lineNumbersEnabled);
+        }
         if (this.dom.statusSpellCheck) {
-            this.dom.statusSpellCheck.textContent = spellCheckEnabled ? 'Spell: On' : 'Spell: Off';
+            const label = spellCheckEnabled ? 'Spell Check: On' : 'Spell Check: Off';
+            this.dom.statusSpellCheck.title = label;
+            this.dom.statusSpellCheck.setAttribute('aria-label', label);
+            this.dom.statusSpellCheck.setAttribute('aria-pressed', String(spellCheckEnabled));
             this.dom.statusSpellCheck.classList.toggle('etle--statusActive', spellCheckEnabled);
         }
+        if (this.dom.statusLanguageTool) {
+            const available = isLanguageToolPluginAvailable();
+            const languageToolEnabled = isLanguageToolEnabled();
+            const label = languageToolEnabled ? 'LanguageTool: On' : 'LanguageTool: Off';
+            this.dom.statusLanguageTool.hidden = !available;
+            this.dom.statusLanguageTool.title = label;
+            this.dom.statusLanguageTool.setAttribute('aria-label', label);
+            this.dom.statusLanguageTool.setAttribute('aria-pressed', String(languageToolEnabled));
+            this.dom.statusLanguageTool.classList.toggle('etle--statusActive', languageToolEnabled);
+        }
         if (this.dom.statusMinimap) {
+            const label = minimapForcedOff
+                ? 'Monaco Minimap: Off while diff mode is open'
+                : minimapEnabled ? 'Monaco Minimap: On' : 'Monaco Minimap: Off';
             this.dom.statusMinimap.hidden = this.editorEngine.id !== 'monaco';
-            this.dom.statusMinimap.textContent = minimapForcedOff ? 'Map: Off (Diff)' : minimapEnabled ? 'Map: On' : 'Map: Off';
+            this.dom.statusMinimap.title = label;
+            this.dom.statusMinimap.setAttribute('aria-label', label);
+            this.dom.statusMinimap.setAttribute('aria-pressed', String(minimapEnabled));
             this.dom.statusMinimap.classList.toggle('etle--statusActive', minimapEnabled);
-            this.dom.statusMinimap.title = minimapForcedOff
-                ? 'Monaco minimap is enabled in settings, but hidden while diff mode is open.'
-                : 'Toggle Monaco minimap';
         }
         if (this.dom.statusLanguage) {
             this.dom.statusLanguage.textContent = this.currentLanguage.label;
@@ -2636,24 +3055,41 @@ export class EveryTextLineEditor {
         if (this.dom.editorEngine) {
             this.dom.editorEngine.value = this.editorEngine.id;
         }
+        if (this.dom.replaceTextFieldEngine) {
+            this.dom.replaceTextFieldEngine.value = this.replaceTextFieldEngine.id;
+        }
         if (this.dom.statusScrollSync) {
+            const syncActive = this.scrollSyncMode.id !== 'off';
+            const label = `Scroll ${this.scrollSyncMode.label}`;
             this.dom.statusScrollSync.hidden = !this.diffOpen;
-            this.dom.statusScrollSync.textContent = this.scrollSyncMode.label;
-            this.dom.statusScrollSync.classList.toggle('etle--statusActive', this.scrollSyncMode.id !== 'off');
+            this.dom.statusScrollSync.title = label;
+            this.dom.statusScrollSync.setAttribute('aria-label', label);
+            this.dom.statusScrollSync.setAttribute('aria-pressed', String(syncActive));
+            this.dom.statusScrollSync.classList.toggle('etle--statusActive', syncActive);
+            this.dom.statusScrollSync.classList.toggle('fa-link', syncActive);
+            this.dom.statusScrollSync.classList.toggle('fa-link-slash', !syncActive);
         }
         this.dom.root?.classList.toggle('etle--syncOff', this.scrollSyncMode.id === 'off');
         const settingStates: Record<string, boolean> = {
             wrap: wrapEnabled,
             spell: spellCheckEnabled,
             ignoreFullJsonHistory: isFullJsonHistoryIgnored(),
-            autoCollapseSidebar: getSetting<boolean>(STORAGE.autoCollapseSidebar, true),
+            autoCollapseSidebar: isAutoCollapseSidebarEnabled(),
+            hideNonEditable: isHideNonEditableSourcesEnabled(),
             minimap: minimapEnabled,
+            replaceTextFields: isReplaceTextFieldsEnabled(),
+            replaceTextFieldLineNumbers: isReplaceTextFieldLineNumbersEnabled(),
+            replaceTextFieldWordWrap: isReplaceTextFieldWordWrapEnabled(),
         };
         for (const [key, active] of Object.entries(settingStates)) {
             const button = this.dom.settingsPanel?.querySelector<HTMLButtonElement>(`[data-setting="${key}"]`);
             button?.classList.toggle('etle--activeButton', active);
             button?.setAttribute('aria-pressed', String(active));
         }
+        this.dom.settingsPanel?.querySelectorAll<HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement>('[data-requires-replacement="1"]')
+            .forEach(control => {
+                control.disabled = !settingStates.replaceTextFields;
+            });
         const minimapSetting = this.dom.settingsPanel?.querySelector<HTMLButtonElement>('[data-setting="minimap"]');
         if (minimapSetting) {
             // Update the label span only; the first child is the icon.
@@ -2674,6 +3110,7 @@ export class EveryTextLineEditor {
         try {
             this.selectedSource.write(value);
             await this.selectedSource.save?.();
+            this.textFieldReplacer.reloadAll();
             this.historyCommit = undefined;
             this.selectedSourceBaseline = this.selectedSource.read();
             this.selectedSourceChanged = false;
@@ -2846,6 +3283,7 @@ export class EveryTextLineEditor {
 
         this.monacoDiffOriginalModel = monaco.editor.createModel(originalValue, language);
         this.monacoDiffModifiedModel = monaco.editor.createModel(modifiedValue, language);
+        const activeFontFamily = this.getActiveFontFamily();
         this.monacoDiffEditor = monaco.editor.createDiffEditor(this.dom.monacoDiffEditorHost, {
             automaticLayout: true,
             originalEditable: false,
@@ -2854,6 +3292,7 @@ export class EveryTextLineEditor {
             minimap: { enabled: isMonacoMinimapEnabled() },
             scrollBeyondLastLine: false,
             diffWordWrap: getSetting<boolean>(STORAGE.wordWrap, true) ? 'on' : 'off',
+            ...(activeFontFamily ? { fontFamily: activeFontFamily } : {}),
         });
         this.applyMonacoMinimapOption();
         this.applyMonacoDiffWordWrapOption();
@@ -2942,7 +3381,19 @@ export class EveryTextLineEditor {
         this.dom.root?.classList.toggle('etle--sourceChanged', this.selectedSourceChanged);
         this.setUnsavedLock(this.dirty);
         if (this.dom.diff) this.dom.diff.disabled = !this.selectedSource;
-        if (this.dom.apply) this.dom.apply.disabled = !this.dirty || this.selectedSource?.readonly;
+        if (this.dom.apply) {
+            const editable = Boolean(this.selectedSource && !this.selectedSource.readonly);
+            const unsaved = editable && this.dirty;
+            const saved = editable && !this.dirty;
+            this.dom.apply.disabled = !unsaved;
+            this.dom.apply.classList.toggle('etle--applyUnsaved', unsaved);
+            this.dom.apply.classList.toggle('etle--applySaved', saved);
+            this.dom.apply.title = unsaved
+                ? 'Unsaved changes — Apply and save (Ctrl+S)'
+                : saved
+                    ? 'Saved (Ctrl+S)'
+                    : 'Read-only';
+        }
         if (this.dom.revert) this.dom.revert.disabled = !this.dirty;
         this.updateStatusBar();
         if (wasDirty !== this.dirty && this.selectedSidebarTab === 'history') this.refreshHistory();
@@ -2958,6 +3409,33 @@ export class EveryTextLineEditor {
         this.editor?.textarea?.focus();
     }
 
+    async openForFieldId(fieldId: string, sourceField?: HTMLTextAreaElement) {
+        await this.open();
+        const worldSelect = document.querySelector<HTMLSelectElement>('#world_editor_select');
+        const activeWorldName = worldSelect?.selectedOptions?.[0]?.textContent?.trim() ?? '';
+        const sourceId = resolveSourceIdForField(fieldId, this.sources, activeWorldName);
+        if (sourceId) {
+            const source = this.sources.find(item => item.id === sourceId);
+            if (source && !this.trackedSourceGroups.has(source.group)) {
+                this.trackedSourceGroups.add(source.group);
+                this.persistTrackedSources();
+                this.renderTree();
+            }
+            await this.selectSource(sourceId);
+            return;
+        }
+
+        const field = sourceField ?? (fieldId ? document.getElementById(fieldId) : null);
+        if (!(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)) return;
+        const domSource = createDomFieldSource(field);
+        if (!field.id && field instanceof HTMLTextAreaElement) domSource.id = `dom-field:${getTextFieldKey(field)}`;
+        this.sources = this.sources.filter(item => item.id !== domSource.id);
+        this.sources.unshift(domSource);
+        this.trackedSourceGroups.add(domSource.group);
+        this.renderTree();
+        await this.selectSource(domSource.id);
+    }
+
     async close() {
         if (this.dirty) {
             const choice = await this.confirmUnsavedSourceChange('close');
@@ -2967,7 +3445,7 @@ export class EveryTextLineEditor {
                 if (!saved) return;
             }
             if (choice === 'discard') {
-                this.updateDirty(false);
+                this.revert();
             }
         }
         if (this.dom.root.classList.contains('openDrawer')) {

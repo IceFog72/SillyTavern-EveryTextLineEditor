@@ -5,7 +5,9 @@ export const NAME = ['dist', 'src'].includes(EXTENSION_FOLDER) ? EXTENSION_PATH_
 export const STORAGE = {
     selectedSource: `${NAME}:selectedSource`,
     wordWrap: `${NAME}:wordWrap`,
+    lineNumbers: `${NAME}:lineNumbers`,
     spellCheck: `${NAME}:spellCheck`,
+    languageTool: `${NAME}:languageTool`,
     monacoMinimap: `${NAME}:monacoMinimap`,
     panelWidth: `${NAME}:panelWidth`,
     sidebarCollapsed: `${NAME}:sidebarCollapsed`,
@@ -13,15 +15,27 @@ export const STORAGE = {
     indentMode: `${NAME}:indentMode`,
     scrollSync: `${NAME}:scrollSync`,
     editorEngine: `${NAME}:editorEngine`,
+    editorFont: `${NAME}:editorFont`,
+    uploadedFonts: `${NAME}:uploadedFonts`,
     sourceLanguages: `${NAME}:sourceLanguages`,
     trackedSources: `${NAME}:trackedSources`,
+    customExtensionFields: `${NAME}:customExtensionFields`,
     ignoreFullJsonHistory: `${NAME}:ignoreFullJsonHistory`,
     autoCollapseSidebar: `${NAME}:autoCollapseSidebar`,
+    hideNonEditableSources: `${NAME}:hideNonEditableSources`,
+    replaceTextFields: `${NAME}:replaceTextFields`,
+    replaceTextFieldEngine: `${NAME}:replaceTextFieldEngine`,
+    replaceTextFieldLineNumbers: `${NAME}:replaceTextFieldLineNumbers`,
+    replaceTextFieldWordWrap: `${NAME}:replaceTextFieldWordWrap`,
+    replaceTextFieldExceptions: `${NAME}:replaceTextFieldExceptions`,
+    textFieldConfigs: `${NAME}:textFieldConfigs`,
     promptInspectorEnabled: `${NAME}:promptInspectorEnabled`,
     promptInspectorCurrent: `${NAME}:promptInspectorCurrent`,
     promptInspectorPrevious: `${NAME}:promptInspectorPrevious`,
     promptInspectorUpdatedAt: `${NAME}:promptInspectorUpdatedAt`,
 };
+
+export const DEFAULT_TEXTFIELD_EXCEPTIONS = '#send_textarea';
 
 export const DB = {
     NAME: `${NAME}:history`,
@@ -101,9 +115,9 @@ export const TEXT_FIELDS: Record<string, TextField[]> = {
         ['dry_sequence_breakers', 'DRY Sequence Breakers'],
     ],
     customOpenAi: [
-        ['custom_include_body', 'Custom Include Body'],
-        ['custom_exclude_body', 'Custom Exclude Body'],
-        ['custom_include_headers', 'Custom Include Headers'],
+        ['custom_include_body', 'Custom Include Body', '#custom_include_body'],
+        ['custom_exclude_body', 'Custom Exclude Body', '#custom_exclude_body'],
+        ['custom_include_headers', 'Custom Include Headers', '#custom_include_headers'],
     ],
     utility: [
         ['send_if_empty', 'Empty User Message Replacement', '#send_if_empty_textarea'],

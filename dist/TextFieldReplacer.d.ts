@@ -1,0 +1,134 @@
+import { FontOption } from './FontManager.js';
+import { EditorEngine, IndentMode, TextFieldConfig, TextFieldConfigs, TextSource } from './types.js';
+export interface InlineEditorInstance {
+    getValue(): string;
+    setValue(value: string): void;
+    setReadOnly(readOnly: boolean): void;
+    setWordWrap(enabled: boolean): void;
+    setLineNumbers(enabled: boolean): void;
+    setLanguage?(language: string): void;
+    setFontFamily?(family: string): void;
+    setIndentMode(mode: IndentMode): void;
+    setSpellCheck(enabled: boolean): void;
+    setLanguageTool?(enabled: boolean): void;
+    setMinimap(enabled: boolean): void;
+    focus?(): void;
+    layout?(): void;
+    dispose(): void;
+}
+export interface InlineEditorMountContext {
+    host: HTMLElement;
+    anchorHost?: HTMLElement;
+    textarea: HTMLTextAreaElement;
+    engine: EditorEngine;
+    language: string;
+    value: string;
+    readOnly: boolean;
+    wordWrap: boolean;
+    lineNumbers: boolean;
+    fontFamily: string;
+    indentMode: IndentMode;
+    spellCheck: boolean;
+    languageTool?: boolean;
+    monacoMinimap: boolean;
+    onChange: (value: string) => void;
+    onBlur: () => void;
+}
+export interface TextFieldReplacerOptions {
+    getEngine: () => EditorEngine;
+    getWordWrap: () => boolean;
+    getLineNumbers?: () => boolean;
+    getFontFamily?: () => string;
+    getFontId?: () => string;
+    getFonts?: () => readonly FontOption[];
+    initialFieldConfigs?: TextFieldConfigs;
+    onFieldConfigsChange?: (configs: TextFieldConfigs) => void;
+    onOpenField?: (textarea: HTMLTextAreaElement) => void;
+    onOpenSettings?: (key: string) => void;
+    getIndentMode: () => IndentMode;
+    getSpellCheck: () => boolean;
+    getMonacoMinimap: () => boolean;
+    isLanguageToolAvailable?: () => boolean;
+    createEditor?: (ctx: InlineEditorMountContext) => Promise<InlineEditorInstance> | InlineEditorInstance;
+    attachAutocomplete?: (editorTextarea: HTMLTextAreaElement, sourceTextarea: HTMLTextAreaElement) => (() => void) | void;
+    maxMonacoInstances?: number;
+    loadMonaco?: () => Promise<any>;
+    root?: ParentNode;
+}
+export declare const getTextFieldKey: (textarea: HTMLTextAreaElement) => string;
+export declare const getTextFieldLabel: (textarea: HTMLTextAreaElement) => string;
+export interface TextFieldInfo {
+    key: string;
+    label: string;
+    present: boolean;
+    state: string;
+    config: TextFieldConfig;
+    effective: {
+        engine: EditorEngine;
+        language: string;
+        wordWrap: boolean;
+        lineNumbers: boolean;
+        fontId: string;
+        fontFamily: string;
+        indentMode: IndentMode;
+        spellCheck: boolean;
+        languageTool: boolean;
+        minimap: boolean;
+    };
+}
+export declare const parseExceptionList: (raw: string) => string[];
+export declare const isAlwaysExcludedTextArea: (textarea: HTMLTextAreaElement) => boolean;
+export declare const matchesException: (textarea: HTMLTextAreaElement, entry: string) => boolean;
+export declare const isTextAreaExcluded: (textarea: HTMLTextAreaElement, exceptions: readonly string[]) => boolean;
+export declare const guessInlineLanguage: (textarea: HTMLTextAreaElement) => string;
+export declare class TextFieldReplacer {
+    private options;
+    private enabled;
+    private exceptions;
+    private managed;
+    private hostToEntry;
+    private mutationObserver;
+    private intersectionObserver;
+    private resizeObserver;
+    private scanScheduled;
+    private useClock;
+    private fieldConfigs;
+    private listeners;
+    constructor(options: TextFieldReplacerOptions);
+    subscribe(listener: () => void): () => void;
+    private notify;
+    private getConfig;
+    private resolveOptions;
+    private loadFieldFont;
+    listFields(): TextFieldInfo[];
+    setFieldConfig(key: string, patch: Partial<TextFieldConfig> | null): Promise<void>;
+    private isExcluded;
+    private getRoot;
+    isEnabled(): boolean;
+    getManagedCount(): number;
+    setEnabled(enabled: boolean): Promise<void>;
+    setExceptions(raw: string): Promise<void>;
+    setEngine(_engine: EditorEngine): Promise<void>;
+    updateOptions(): Promise<void>;
+    private applyEntryOptions;
+    reloadAll(): void;
+    scan(): Promise<void>;
+    destroy(): void;
+    private startObservers;
+    private stopObservers;
+    private scheduleScan;
+    private getInitialHostHeight;
+    private isElementVisible;
+    private attach;
+    private renderStatusBar;
+    private evictMonacoIfNeeded;
+    private showNativeTextarea;
+    private mountEditor;
+    private syncEditorFromTextarea;
+    private syncAttributesFromTextarea;
+    private detach;
+}
+export declare const resolveSourceIdForField: (fieldId: string, sources: readonly {
+    id: string;
+}[], activeWorldName?: string) => string | null;
+export declare const createDomFieldSource: (field: HTMLTextAreaElement | HTMLInputElement) => TextSource;

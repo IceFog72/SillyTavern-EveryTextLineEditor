@@ -2,7 +2,9 @@ export declare const NAME: string;
 export declare const STORAGE: {
     selectedSource: string;
     wordWrap: string;
+    lineNumbers: string;
     spellCheck: string;
+    languageTool: string;
     monacoMinimap: string;
     panelWidth: string;
     sidebarCollapsed: string;
@@ -10,15 +12,26 @@ export declare const STORAGE: {
     indentMode: string;
     scrollSync: string;
     editorEngine: string;
+    editorFont: string;
+    uploadedFonts: string;
     sourceLanguages: string;
     trackedSources: string;
+    customExtensionFields: string;
     ignoreFullJsonHistory: string;
     autoCollapseSidebar: string;
+    hideNonEditableSources: string;
+    replaceTextFields: string;
+    replaceTextFieldEngine: string;
+    replaceTextFieldLineNumbers: string;
+    replaceTextFieldWordWrap: string;
+    replaceTextFieldExceptions: string;
+    textFieldConfigs: string;
     promptInspectorEnabled: string;
     promptInspectorCurrent: string;
     promptInspectorPrevious: string;
     promptInspectorUpdatedAt: string;
 };
+export declare const DEFAULT_TEXTFIELD_EXCEPTIONS = "#send_textarea";
 export declare const DB: {
     readonly NAME: `${string}:history`;
     readonly VERSION: 2;
