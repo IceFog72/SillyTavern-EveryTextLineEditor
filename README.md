@@ -17,10 +17,10 @@ An in-SillyTavern editor for prompts, preset text, lorebook entries, personas, c
 * Diff mode: compare the current working draft with the saved baseline or history snapshots
 * Source history: save local snapshots, compare changed sources, and load older versions
 * Syntax selection: choose Markdown, JSON, YAML, or plain text per source
-* Word wrap, spell check, minimap, and scroll-sync controls
+* Word wrap, line numbers, spell check, optional LanguageTool grammar check, Monaco minimap, and scroll-sync controls
 * Prompt controls: toggle enabled prompts and edit supported prompt metadata
-* Textbox status bars: choose an engine, language, word wrap, spell check, and Monaco minimap per box, open it in ETLE, or disable its replacement
-* Settings window: manage global defaults and saved overrides from a searchable textbox list
+* Textbox status bars: choose an engine, language, word wrap, line numbers, spell check, LanguageTool, and Monaco minimap per box, open it in ETLE, or disable its replacement
+* Settings window: manage global defaults, info/feedback links, and customized textbox overrides from a searchable list
 * Local-first storage: history is stored in browser IndexedDB
 
 ---
@@ -42,6 +42,11 @@ Then reload SillyTavern and enable **Every Text Line Editor**.
 
 * SillyTavern `1.12.0` or newer
 * Modern Chromium/Firefox-based browser
+
+### Optional Integrations
+
+* **[LanguageTool Server Plugin](https://github.com/IceFog72/SillyTavern-LanguageToolPlugin)** (`/api/plugins/languagetool`): Required for built-in LanguageTool grammar and spelling checks in both **Prism** and **Monaco** (main editor and inline replaced textboxes). ETLE talks directly to the server plugin and does not need the separate LanguageTool UI extension. Checking is off by default; the status bar toggle appears automatically when the plugin is detected and stays hidden otherwise.
+* **[ProbablyTooManyTabs (PTMT)](https://github.com/IceFog72/SillyTavern-ProbablyTooManyTabs)**: Optional; ETLE works standalone without PTMT. When `#etle--panel` is docked in a PTMT tab, **Open in ETLE** restores or switches to the ETLE tab if it is closed, hidden, or collapsed (and does nothing to tab state if already open), and clicking outside the docked tab does not prompt to close ETLE on unsaved changes.
 
 
 ---
@@ -86,9 +91,13 @@ SillyTavern-EveryTextLineEditor/
 ├── style.css                 # Extension UI and editor styling
 ├── src/
 │   ├── EveryTextLineEditor.ts # Main editor shell and editor adapters
+│   ├── TextFieldReplacer.ts  # Inline SillyTavern textarea replacement
+│   ├── LanguageToolClient.ts # Direct LanguageTool server plugin client (Prism + Monaco)
+│   ├── FontManager.ts        # Built-in and uploaded editor font management
 │   ├── SourceManager.ts      # SillyTavern source discovery and save logic
 │   ├── SourcePanel.ts        # Source tree and source control dialog
-│   ├── SettingsPanel.ts      # Settings UI
+│   ├── SettingsPanel.ts      # Settings sections and info/feedback UI
+│   ├── SettingsWindow.ts     # Settings dialog and per-textbox overrides
 │   ├── HistoryPanel.ts       # History sidebar UI
 │   ├── HistoryStore.ts       # IndexedDB snapshot storage
 │   ├── constants.ts          # Storage keys and option lists

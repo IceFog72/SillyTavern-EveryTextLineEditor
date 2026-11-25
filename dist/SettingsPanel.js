@@ -117,7 +117,7 @@ function renderSharedEditorSettings(host) {
     editorButtons.classList.add('etle--settingsButtonRow');
     editorButtons.append(wrapButton, spellButton, autoCollapseButton, hideNonEditableButton);
     const ltNote = document.createElement('small');
-    ltNote.textContent = 'LanguageTool grammar checking requires the SillyTavern LanguageTool server plugin; its status bar toggle appears automatically when the plugin is installed.';
+    ltNote.innerHTML = 'LanguageTool grammar checking requires the <a href="https://github.com/IceFog72/SillyTavern-LanguageToolPlugin" target="_blank" rel="noopener noreferrer">SillyTavern LanguageTool server plugin</a>; its status bar toggle appears automatically when the plugin is installed.';
     editorGroup.append(editorButtons, ltNote);
     return editorGroup;
 }

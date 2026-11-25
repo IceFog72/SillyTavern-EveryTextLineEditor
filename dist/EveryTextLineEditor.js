@@ -3207,9 +3207,35 @@ export class EveryTextLineEditor {
         if (wasDirty !== this.dirty && this.selectedSidebarTab === 'history')
             this.refreshHistory();
     }
+    openInPtmtIfDocked() {
+        const ptmt = globalThis.ptmtTabs;
+        const hidden = Boolean(ptmt?.isTabHidden?.('etle--panel'));
+        const existingPanel = this.dom.root?.closest?.('.ptmt-panel')
+            ?? document.querySelector('.ptmt-panel[data-source-id="etle--panel"]');
+        if (!existingPanel && !hidden)
+            return false;
+        if (hidden)
+            ptmt.restoreHiddenTab?.('etle--panel');
+        const panel = this.dom.root?.closest?.('.ptmt-panel')
+            ?? document.querySelector('.ptmt-panel[data-source-id="etle--panel"]');
+        const pid = panel?.dataset?.panelId;
+        if (!panel || !pid)
+            return false;
+        const isClosed = panel.classList.contains('hidden') || Boolean(panel.closest('.view-collapsed'));
+        if (isClosed) {
+            if (typeof ptmt?.openTab === 'function') {
+                ptmt.openTab(pid);
+            }
+            else {
+                const escaped = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(pid) : pid;
+                document.querySelector(`.ptmt-tab[data-for="${escaped}"]`)?.click();
+            }
+        }
+        return true;
+    }
     async open() {
         await this.refreshSources(true);
-        if (!this.dom.root.classList.contains('openDrawer')) {
+        if (!this.openInPtmtIfDocked() && !this.dom.root.classList.contains('openDrawer')) {
             this.dom.toggle.click();
         }
         this.editor?.update?.();
